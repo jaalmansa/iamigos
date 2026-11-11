@@ -1,8 +1,8 @@
-// IAmigos — sprites pixel art originales, definidos como rejillas de texto.
+// IAmigos — original pixel-art sprites, defined as text grids.
 //
-// Leyenda:  .  transparente   d  contorno           b  cuerpo
-//           a  acento         e  ojo               w  brillo
-// (s = sombra y h = luz se añaden solos con shade()). Todos miden 12×11. El color de b/a/d sale de la paleta de cada sesión.
+// Legend:  .  transparent   d  outline           b  body
+//          a  accent        e  eye               w  highlight
+// (s = shadow and h = light are added by shade()). All are 12×11. The colours of b/a/d come from each session's palette.
 
 export const SPRITE_W = 12;
 export const SPRITE_H = 11;
@@ -34,7 +34,7 @@ export const CHARACTERS = {
         '..dd....dd..',
         '..dd....dd..',
     ],
-    michi: [
+    cat: [
         '.d........d.',
         '.dd......dd.',
         '.dbd....dbd.',
@@ -47,7 +47,7 @@ export const CHARACTERS = {
         '..dbbbbbbd..',
         '...dddddd...',
     ],
-    seta: [
+    mushroom: [
         '...dddddd...',
         '..daawaaad..',
         '.daaaaaaaad.',
@@ -60,7 +60,7 @@ export const CHARACTERS = {
         '..dbbbbbbd..',
         '...dddddd...',
     ],
-    pajaro: [
+    bird: [
         '.....dd.....',
         '....dbbd....',
         '..ddbbbbdd..',
@@ -73,7 +73,7 @@ export const CHARACTERS = {
         '..dddddddd..',
         '...aa..aa...',
     ],
-    fantasma: [
+    ghost: [
         '....dddd....',
         '..ddbbbbdd..',
         '.dbwbbbbbbd.',
@@ -99,7 +99,7 @@ export const CHARACTERS = {
         '..daaaaaad..',
         '...dddddd...',
     ],
-    pulpo: [
+    octopus: [
         '...dddddd...',
         '..dbbbbbbd..',
         '.dbwbbbbbbd.',
@@ -116,20 +116,19 @@ export const CHARACTERS = {
 
 export const CHARACTER_NAMES = Object.keys(CHARACTERS);
 
-// Tonos base (cuerpo). El contorno y el acento se derivan de cada uno.
+// Base hues (body). The outline and accent are derived from each one.
 export const HUES = [
     '#e8735a', '#4a7bf0', '#9b6cf0', '#52c96b',
     '#3cc8e0', '#f0c94a', '#f06ca8', '#f0964a',
 ];
 
-// Glifos de los indicadores de estado (x = píxel encendido).
+// State indicator glyphs (x = pixel on).
 export const BADGES = {
     permission: {color: '#ffd23f', rows: ['x', 'x', 'x', '.', 'x']},
     asking: {color: '#ffffff', rows: ['xx.', '..x', '.x.', '...', '.x.']},
     done: {color: '#4cd964', rows: ['....x', '...x.', 'x.x..', '.x...']},
     error: {color: '#ff4d4d', rows: ['x.x', '.x.', 'x.x']},
     asleep: {color: '#c8c8d0', rows: ['xxxx', '..x.', '.x..', 'xxxx']},
-    closed: {color: '#808088', rows: ['xxxx', '..x.', '.x..', 'xxxx']},
 };
 
 function hexToRgb(hex) {
@@ -147,8 +146,8 @@ export function makePalette(hueHex) {
         b,
         d: mix(b, [0, 0, 0], 0.55),
         a: mix(b, [1, 1, 1], 0.45),
-        s: mix(b, [0, 0, 0], 0.28),   // sombra
-        h: mix(b, [1, 1, 1], 0.22),   // luz
+        s: mix(b, [0, 0, 0], 0.28),   // shadow
+        h: mix(b, [1, 1, 1], 0.22),   // light
         e: [0.08, 0.08, 0.1],
         w: [1, 1, 1],
     };
@@ -158,7 +157,7 @@ export function greyPalette() {
     return makePalette('#5a5a60');
 }
 
-// Hash estable (djb2) para que cada sesión tenga siempre el mismo bicho.
+// Stable hash (djb2), so a session always gets the same critter.
 export function hashString(s) {
     let h = 5381;
     for (let i = 0; i < s.length; i++)
@@ -166,8 +165,8 @@ export function hashString(s) {
     return h;
 }
 
-// El personaje depende solo del proyecto; ordinal > 0 (otra sesión del mismo
-// proyecto) desplaza el color para poder distinguirlas.
+// The character depends only on the project; ordinal > 0 (another session of the
+// same project) shifts the colour so they can be told apart.
 export function pickLook(projectKey, ordinal = 0) {
     const h = hashString(projectKey);
     return {
@@ -176,9 +175,9 @@ export function pickLook(projectKey, ordinal = 0) {
     };
 }
 
-// Sombreado automático estilo pixel art: en cada columna, el píxel de cuerpo
-// más bajo pasa a sombra (s) y el más alto a luz (h). Así los diseños siguen
-// siendo rejillas sencillas y todos ganan volumen igual.
+// Automatic pixel-art shading: in every column, the lowest body pixel becomes
+// shadow (s) and the highest becomes light (h). The designs stay simple grids
+// and all of them get the same sense of volume.
 export function shade(grid) {
     const rows = grid.map(r => [...r]);
     for (let x = 0; x < SPRITE_W; x++) {
@@ -191,7 +190,7 @@ export function shade(grid) {
     return rows.map(r => r.join(''));
 }
 
-// Fila más baja de cada columna que contiene un ojo (para los ojos cerrados).
+// Lowest row of each column that has an eye (for closed eyes).
 export function lowestEyeRows(grid) {
     const out = {};
     grid.forEach((row, y) => {

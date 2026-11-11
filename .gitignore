@@ -4,3 +4,4 @@ dist/
 *.tgz
 node_modules/
 docs/sprites.html
+gschemas.compiled

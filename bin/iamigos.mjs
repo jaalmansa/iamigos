@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// IAmigos — instalador (Linux + GNOME).
+// IAmigos — installer (Linux + GNOME).
 //
-//   npx iamigos install      copia la extensión, el hook de Claude Code y el plugin de OpenCode
-//   npx iamigos uninstall    lo quita todo (deja una copia de ~/.claude/settings.json)
-//   npx iamigos status       qué hay instalado
+//   npx iamigos install      copies the extension, the Claude Code hook and the OpenCode plugin
+//   npx iamigos uninstall    removes all of it (keeps a backup of ~/.claude/settings.json)
+//   npx iamigos status       shows what is installed
 //
-// Opción --link (desarrollo): enlaza en vez de copiar, para editar el repo y ver los cambios.
+// --link (development): symlinks instead of copying, to edit the repo and see the changes.
 
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
@@ -26,7 +26,7 @@ const SRC = {
 };
 const DST = {
     ext: path.join(XDG_DATA, 'gnome-shell', 'extensions', UUID),
-    // Ruta fija y fuera de la caché de npx: es la que queda escrita en settings.json.
+    // Fixed path outside the npx cache: this is the one written to settings.json.
     hook: path.join(HOME, '.local', 'bin', 'iamigos-hook'),
     opencodeDir: path.join(XDG_CONFIG, 'opencode'),
     opencode: path.join(XDG_CONFIG, 'opencode', 'plugins', 'iamigos.ts'),
@@ -37,7 +37,7 @@ const DST = {
 const EVENTS = [
     'SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse',
     'PostToolUseFailure', 'PermissionRequest', 'PermissionDenied', 'Notification',
-    'PreCompact', 'PostCompact', 'Stop', 'StopFailure', 'SubagentStart',
+    'PreCompact', 'PostCompact', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop',
 ];
 
 const ok = msg => console.log(`✓ ${msg}`);
@@ -61,7 +61,7 @@ function remove(p) {
     fs.rmSync(p, {recursive: true, force: true});
 }
 
-// Copia (o enlaza con --link) sustituyendo lo que hubiera, symlink antiguo incluido.
+// Copies (or symlinks with --link), replacing whatever was there, old symlink included.
 function place(src, dst, link, mode) {
     fs.mkdirSync(path.dirname(dst), {recursive: true});
     remove(dst);
@@ -74,8 +74,8 @@ function place(src, dst, link, mode) {
         fs.chmodSync(dst, mode);
 }
 
-// Añade o quita el hook de todos los eventos de ~/.claude/settings.json.
-// Siempre deja antes una copia en settings.json.iamigos.bak.
+// Adds or removes the hook for every event in ~/.claude/settings.json.
+// Always saves a backup to settings.json.iamigos.bak first.
 function claudeSettings(action) {
     let cfg = {};
     if (fs.existsSync(DST.settings)) {
@@ -83,7 +83,7 @@ function claudeSettings(action) {
         try {
             cfg = JSON.parse(raw);
         } catch (e) {
-            throw new Error(`${DST.settings} no es JSON válido (${e.message}); no lo toco.`);
+            throw new Error(`${DST.settings} is not valid JSON (${e.message}); leaving it alone.`, {cause: e});
         }
         fs.writeFileSync(`${DST.settings}.iamigos.bak`, raw);
     } else if (action === 'remove') {
@@ -111,8 +111,8 @@ function claudeSettings(action) {
     return true;
 }
 
-// Listas de extensiones de GNOME (gsettings org.gnome.shell). Tocarlas directamente
-// sirve aunque la shell aún no vea la extensión: la cargará al volver a iniciar sesión.
+// GNOME's extension lists (gsettings org.gnome.shell). Changing them directly works
+// even before the shell sees the extension: it loads it at the next login.
 function extensionList(key) {
     const r = sh('gsettings', ['get', 'org.gnome.shell', key]);
     if (!r || r.code !== 0)
@@ -125,7 +125,7 @@ function setExtensionList(key, list) {
     return sh('gsettings', ['set', 'org.gnome.shell', key, value])?.code === 0;
 }
 
-// Devuelve true si la extensión queda marcada como activa.
+// Returns true if the extension ends up marked as enabled.
 function markEnabled(enable) {
     const enabled = extensionList('enabled-extensions');
     const disabled = extensionList('disabled-extensions');
@@ -148,17 +148,17 @@ function shellVersion() {
 
 function checkEnvironment() {
     if (process.platform !== 'linux')
-        throw new Error('IAmigos de momento solo funciona en Linux con GNOME Shell.');
+        throw new Error('IAmigos only works on Linux with GNOME Shell for now.');
 
     const version = shellVersion();
     const supported = JSON.parse(fs.readFileSync(path.join(SRC.ext, 'metadata.json'), 'utf8'))['shell-version'];
     if (!version)
-        warn('No encuentro gnome-shell: la extensión se copia igualmente, pero sin GNOME no se verá.');
+        warn('gnome-shell not found: the extension is installed anyway, but it needs GNOME to show up.');
     else if (!supported.includes(version))
-        warn(`Tu GNOME Shell es ${version} y la extensión está probada en ${supported.join(', ')}; puede que no cargue.`);
+        warn(`Your GNOME Shell is ${version} and the extension is tested on ${supported.join(', ')}; it may not load.`);
 
     if (!sh('python3', ['--version']))
-        warn('No encuentro python3: el hook de Claude Code lo necesita.');
+        warn('python3 not found: the Claude Code hook needs it.');
 }
 
 function install(link) {
@@ -166,39 +166,44 @@ function install(link) {
     const wasInstalled = exists(DST.ext);
 
     place(SRC.ext, DST.ext, link);
-    ok(`extensión   → ${DST.ext}${link ? ' (enlace)' : ''}`);
+    ok(`extension   → ${DST.ext}${link ? ' (link)' : ''}`);
+    // The preferences schema is compiled where GNOME looks for it
+    // (with --link, inside the repo; gschemas.compiled is in .gitignore).
+    const schemas = path.join(link ? SRC.ext : DST.ext, 'schemas');
+    if (sh('glib-compile-schemas', [schemas])?.code !== 0)
+        warn('Could not compile the preferences schema (is glib-compile-schemas missing?).');
 
     place(SRC.hook, DST.hook, link, 0o755);
-    ok(`hook        → ${DST.hook}${link ? ' (enlace)' : ''}`);
+    ok(`hook        → ${DST.hook}${link ? ' (link)' : ''}`);
 
     if (fs.existsSync(DST.claudeDir)) {
         claudeSettings('add');
-        ok(`Claude Code → hooks en ${DST.settings} (copia en .iamigos.bak)`);
+        ok(`Claude Code → hooks in ${DST.settings} (backup in .iamigos.bak)`);
     } else {
-        warn(`No encuentro ${DST.claudeDir}: si instalas Claude Code más tarde, vuelve a ejecutar este comando.`);
+        warn(`${DST.claudeDir} not found: if you install Claude Code later, run this command again.`);
     }
 
     if (fs.existsSync(DST.opencodeDir)) {
         place(SRC.opencode, DST.opencode, link);
-        ok(`OpenCode    → ${DST.opencode}${link ? ' (enlace)' : ''}`);
+        ok(`OpenCode    → ${DST.opencode}${link ? ' (link)' : ''}`);
     }
 
-    // Si la shell ya la conoce, se activa al momento; si no (extensión nueva en
-    // Wayland), queda marcada como activa y GNOME la carga al volver a entrar.
+    // If the shell already knows it, it is enabled right away; if not (new extension
+    // on Wayland), it is marked as enabled and GNOME loads it at the next login.
     const live = sh('gnome-extensions', ['enable', UUID])?.code === 0;
     const marked = markEnabled(true);
     if (live && !wasInstalled) {
-        ok('extensión activada');
+        ok('extension enabled');
     } else if (live) {
-        ok('extensión actualizada: cierra sesión y vuelve a entrar para cargar la versión nueva.');
+        ok('extension updated: log out and back in to load the new version.');
     } else if (marked) {
-        ok('extensión activada: aparecerá cuando cierres sesión y vuelvas a entrar.');
+        ok('extension enabled: it will show up after you log out and back in.');
     } else {
-        warn('No he podido activar la extensión. Cierra sesión, entra de nuevo y ejecuta:');
+        warn('Could not enable the extension. Log out, log back in and run:');
         console.log(`  gnome-extensions enable ${UUID}`);
     }
     if (sh('gsettings', ['get', 'org.gnome.shell', 'disable-user-extensions'])?.out === 'true')
-        warn('Tienes desactivadas las extensiones de usuario; actívalas en la app Extensiones.');
+        warn('User extensions are disabled; turn them on in the Extensions app.');
 }
 
 function uninstall() {
@@ -207,20 +212,20 @@ function uninstall() {
     for (const p of [DST.ext, DST.hook, DST.opencode]) {
         if (exists(p)) {
             remove(p);
-            ok(`borrado ${p}`);
+            ok(`removed ${p}`);
         }
     }
     if (claudeSettings('remove'))
-        ok(`hooks quitados de ${DST.settings} (copia en .iamigos.bak)`);
-    console.log('IAmigos desinstalado. Las sesiones guardadas siguen en ~/.local/state/iamigos.');
+        ok(`hooks removed from ${DST.settings} (backup in .iamigos.bak)`);
+    console.log('IAmigos uninstalled. Saved sessions are still in ~/.local/state/iamigos.');
 }
 
 function status() {
     const show = (label, p) => {
-        const where = isSymlink(p) ? `enlace → ${fs.readlinkSync(p)}` : exists(p) ? 'copiado' : 'no instalado';
+        const where = isSymlink(p) ? `link → ${fs.readlinkSync(p)}` : exists(p) ? 'copied' : 'not installed';
         console.log(`${label.padEnd(12)} ${where}  (${p})`);
     };
-    show('extensión', DST.ext);
+    show('extension', DST.ext);
     show('hook', DST.hook);
     show('OpenCode', DST.opencode);
 
@@ -229,32 +234,34 @@ function status() {
         const cfg = JSON.parse(fs.readFileSync(DST.settings, 'utf8'));
         hooked = EVENTS.filter(ev => (cfg.hooks?.[ev] ?? [])
             .some(g => (g.hooks ?? []).some(h => h.command === DST.hook))).length;
-    } catch {}
-    console.log(`${'Claude Code'.padEnd(12)} ${hooked}/${EVENTS.length} eventos con el hook`);
+    } catch {
+        // no settings.json (or unreadable): 0 events
+    }
+    console.log(`${'Claude Code'.padEnd(12)} ${hooked}/${EVENTS.length} events with the hook`);
 
     const info = sh('gnome-extensions', ['info', UUID]);
     const state = info?.out.match(/State:\s*(\S+)/i)?.[1];
-    console.log(`${'GNOME'.padEnd(12)} ${state ?? 'no la ve (¿falta volver a iniciar sesión?)'}`);
+    console.log(`${'GNOME'.padEnd(12)} ${state ?? 'not seen (log out and back in?)'}`);
 }
 
 function usage() {
-    console.log(`Uso: iamigos <install|uninstall|status> [--link]
+    console.log(`Usage: iamigos <install|uninstall|status> [--link]
 
-  install     instala la extensión de GNOME, el hook de Claude Code y el plugin de OpenCode
-  uninstall   lo quita todo
-  status      muestra qué hay instalado
-  --link      (desarrollo) enlaza al repositorio en vez de copiar`);
+  install     installs the GNOME extension, the Claude Code hook and the OpenCode plugin
+  uninstall   removes all of it
+  status      shows what is installed
+  --link      (development) symlinks to the repository instead of copying`);
 }
 
 const [cmd, ...flags] = process.argv.slice(2);
 try {
-    if (cmd === 'install')
+    if (cmd === 'install') {
         install(flags.includes('--link'));
-    else if (cmd === 'uninstall')
+    } else if (cmd === 'uninstall') {
         uninstall();
-    else if (cmd === 'status')
+    } else if (cmd === 'status') {
         status();
-    else {
+    } else {
         usage();
         process.exitCode = cmd && !['-h', '--help', 'help'].includes(cmd) ? 1 : 0;
     }

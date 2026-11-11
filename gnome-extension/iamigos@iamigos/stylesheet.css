@@ -31,3 +31,30 @@
   color: #9a9aa2;
   margin-left: 12px;
 }
+
+/* Has been waiting for your permission or answer for too long. */
+.iamigos-pet.urgent {
+  border-color: #ffd23f;
+}
+
+/* "+N": sessions that do not fit in the bar. */
+.iamigos-more {
+  font-size: 0.85em;
+  font-weight: bold;
+  color: #c8c8d0;
+  padding: 0 2px;
+}
+
+/* Second line of each session in the menu. */
+.iamigos-details {
+  font-size: 0.8em;
+  color: #9a9aa2;
+  padding-top: 2px;
+}
+
+/* Side padding of the menu items: in GNOME 50, with no ornament, the text
+   sits right against the edge. */
+.iamigos-menu .popup-menu-item {
+  padding-left: 14px;
+  padding-right: 14px;
+}

@@ -151,52 +151,83 @@ const PANEL = '#1d1d20';
 }
 
 // --- Top bar + dropdown menu --------------------------------------------------
+// Mini critter (a subagent): the same sprite, smaller, without the state box.
+function mini(lk, x, y, s) {
+    const pal = makePalette(lk.hue);
+    const out = [];
+    lk.grid.forEach((row, gy) => [...row].forEach((ch, gx) => {
+        if (ch !== '.')
+            out.push(`<rect x="${x + gx * s}" y="${y + gy * s}" width="${s}" height="${s}" fill="${hex(pal[ch])}"/>`);
+    }));
+    return out.join('');
+}
+
 {
     uid = 0;
     const S = 3;
     const sessions = [
-        {c: 'robot', hue: HUES[1], view: 'working', label: 'api-server  ·  trabajando  ·  2 min', agent: 'Claude'},
-        {c: 'michi', hue: HUES[0], view: 'permission', label: 'web-app  ·  pide permiso (Bash)  ·  12 s', agent: 'Claude'},
-        {c: 'pulpo', hue: HUES[4], view: 'asking', label: 'infra  ·  te pregunta (AskUserQuestion)  ·  1 min', agent: 'Claude'},
-        {c: 'seta', hue: HUES[3], view: 'done', label: 'docs  ·  terminado  ·  4 min', agent: 'OpenCode'},
-        {c: 'blob', hue: HUES[2], view: 'asleep', label: 'scripts  ·  durmiendo  ·  1 h 5 min', agent: 'Claude'},
+        {c: 'robot', hue: HUES[1], view: 'working', subs: 2, agent: 'Claude',
+            title: 'api-server  ·  working  ·  2 min',
+            details: 'Bash  ·  turn 3 min  ·  ⎇ main  ·  84k context (opus-5-5)  ·  2 subagents: Explore, Plan'},
+        {c: 'cat', hue: HUES[0], view: 'permission', agent: 'Claude',
+            title: 'web-app  ·  needs permission (Bash)  ·  12 s',
+            details: 'turn 1 min  ·  ⎇ feature/login  ·  41k context (sonnet-5-5)'},
+        {c: 'octopus', hue: HUES[4], view: 'asking', agent: 'Claude',
+            title: 'infra  ·  asking you (AskUserQuestion)  ·  1 min',
+            details: 'turn 4 min  ·  ⎇ main  ·  126k context (opus-5-5)'},
+        {c: 'mushroom', hue: HUES[3], view: 'done', agent: 'OpenCode',
+            title: 'docs  ·  done  ·  4 min',
+            details: 'last turn 2 min  ·  ⎇ docs  ·  18k context'},
+        {c: 'blob', hue: HUES[2], view: 'asleep', agent: 'Claude',
+            title: 'scripts  ·  asleep  ·  1 h 5 min',
+            details: 'last turn 6 min  ·  ⎇ main'},
     ];
-    const W = 780, BAR = 50, GAP = 4;
+    const W = 780, BAR = 50, GAP = 4, MS = 1.5;   // MS: mini critter pixel
+    const miniW = (SPRITE_W + 1) * MS;
+    const pets = sessions.map(s => ({s, p: pet(look(s.c, s.hue), s.view, 0, 0, S)}));
+    const width = ({s, p}) => p.w + (s.subs ? miniW * Math.ceil(s.subs / 2) : 0);
+    const total = pets.reduce((sum, item) => sum + width(item) + GAP, -GAP);
     const parts = [];
-    let x = 0;
-    const pets = sessions.map(s => {
-        const p = pet(look(s.c, s.hue), s.view, 0, 0, S);
-        x += p.w + GAP;
-        return p;
-    });
-    const total = x - GAP;
     let px = W - 24 - total;
     const startX = px;
-    for (const p of pets) {
+    for (const item of pets) {
+        const {s, p} = item;
         const y = (BAR - p.h) / 2;
         parts.push(p.svg.replace('translate(0 0)', `translate(${px} ${y})`));
-        px += p.w + GAP;
+        for (let i = 0; i < (s.subs ?? 0); i++) {
+            const mx = px + p.w + Math.floor(i / 2) * miniW;
+            const my = y + 1 + (i % 2) * (SPRITE_H + 1) * MS;
+            parts.push(mini(look(s.c, s.hue), mx, my, MS));
+        }
+        px += width(item) + GAP;
     }
 
     const font = `font-family="Cantarell, 'Noto Sans', 'Segoe UI', system-ui, sans-serif"`;
-    const ROW = 36, MX = 290, MW = W - MX - 12, MY = BAR + 8, MH = sessions.length * ROW + 16;
+    const ROW = 50, PAD = 8, PREFS = 40;
+    const MX = 250, MW = W - MX - 12, MY = BAR + 8;
+    const MH = PAD + sessions.length * ROW + 9 + PREFS + PAD;
+    const sepY = MY + PAD + sessions.length * ROW + 4;
     const menu = [
         `<rect x="${MX}" y="${MY}" width="${MW}" height="${MH}" rx="12" fill="#2a2a2e" stroke="#3a3a40"/>`,
         // the little arrow that points at the indicator
         `<path d="M${startX + total / 2 - 8} ${MY + 0.5} l8 -8 l8 8z" fill="#2a2a2e"/>`,
-        `<rect x="${MX + 6}" y="${MY + 8 + ROW}" width="${MW - 12}" height="${ROW}" rx="8" fill="#3a3a40"/>`,
+        // hovered row
+        `<rect x="${MX + 6}" y="${MY + PAD + ROW}" width="${MW - 12}" height="${ROW}" rx="8" fill="#3a3a40"/>`,
         ...sessions.map((s, i) => {
-            const ty = MY + 8 + i * ROW + ROW / 2 + 5;
-            return `<text x="${MX + 20}" y="${ty}" ${font} font-size="14" fill="#ececec">${s.label}</text>`
-                + `<text x="${MX + MW - 20}" y="${ty}" ${font} font-size="11.5" fill="#9a9aa2" text-anchor="end">${s.agent}</text>`;
+            const top = MY + PAD + i * ROW;
+            return `<text x="${MX + 20}" y="${top + 21}" ${font} font-size="14" fill="#ececec">${s.title}</text>`
+                + `<text x="${MX + 20}" y="${top + 39}" ${font} font-size="11.5" fill="#9a9aa2">${s.details}</text>`
+                + `<text x="${MX + MW - 20}" y="${top + 30}" ${font} font-size="11.5" fill="#9a9aa2" text-anchor="end">${s.agent}</text>`;
         }),
+        `<rect x="${MX + 14}" y="${sepY}" width="${MW - 28}" height="1" fill="#45454c"/>`,
+        `<text x="${MX + 20}" y="${sepY + 5 + PREFS / 2 + 5}" ${font} font-size="14" fill="#ececec">Preferences</text>`,
     ];
 
     const H = MY + MH + 12;
     write('topbar.svg', svgDoc(W, H, [
         `<rect width="${W}" height="${H}" rx="14" fill="#141416"/>`,
         `<rect width="${W}" height="${BAR}" rx="14" fill="#000"/><rect y="${BAR - 14}" width="${W}" height="14" fill="#000"/>`,
-        `<text x="${W / 2}" y="${BAR / 2 + 5}" ${font} font-size="14" font-weight="bold" fill="#ececec" text-anchor="middle">11 nov 10:42</text>`,
+        `<text x="${W / 2 - 120}" y="${BAR / 2 + 5}" ${font} font-size="14" font-weight="bold" fill="#ececec" text-anchor="middle">Nov 11  10:42</text>`,
         `<g shape-rendering="geometricPrecision">${menu.join('')}</g>`,
         ...parts,
     ].join('')));

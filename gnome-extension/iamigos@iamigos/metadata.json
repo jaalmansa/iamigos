@@ -1,7 +1,13 @@
 {
   "uuid": "iamigos@iamigos",
   "name": "IAmigos",
-  "description": "Un bicho pixel art en la barra superior por cada sesión activa de Claude Code u OpenCode: trabajando, pide permiso, te pregunta, compactando, terminado, durmiendo, error o cerrada.",
-  "shell-version": ["48", "49", "50"],
-  "version": 1
+  "description": "A pixel-art critter in the top bar for every running Claude Code or OpenCode session, showing what it is doing: working, needs permission, asking you, done… Click to jump to its terminal.",
+  "shell-version": [
+    "48",
+    "49",
+    "50"
+  ],
+  "version": 2,
+  "settings-schema": "org.gnome.shell.extensions.iamigos",
+  "url": "https://github.com/jaalmansa/iamigos"
 }

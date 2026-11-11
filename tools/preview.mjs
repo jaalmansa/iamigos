@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --no-warnings
-// Genera docs/sprites.html con todos los personajes × estados y la paleta de colores,
-// leyendo los diseños directamente de la extensión (sprites.js).
-//   node tools/preview.mjs   →  abre docs/sprites.html en el navegador
+// Writes docs/sprites.html with every character × state and the colour palette,
+// reading the designs straight from the extension (sprites.js).
+//   node tools/preview.mjs   →  then open docs/sprites.html in a browser
 import {writeFileSync, mkdirSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -60,9 +60,9 @@ table{border-collapse:separate;border-spacing:10px}th{font-weight:500;color:#999
 .pet{display:inline-block;border:3px solid transparent;border-radius:12px;padding:4px}
 </style>
 <h1>IAmigos · sprites</h1>
-<p>Generado desde <code>gnome-extension/iamigos@iamigos/sprites.js</code>. Edita las rejillas y vuelve a ejecutar <code>node tools/preview.mjs</code>.</p>
-<h2>Personajes × estados</h2>${stateTable}
-<h2>Personajes × colores</h2>${colorTable}`;
+<p>Generated from <code>gnome-extension/iamigos@iamigos/sprites.js</code>. Edit the grids and run <code>node tools/preview.mjs</code> again.</p>
+<h2>Characters × states</h2>${stateTable}
+<h2>Characters × colours</h2>${colorTable}`;
 
 mkdirSync(dirname(OUT), {recursive: true});
 writeFileSync(OUT, html);

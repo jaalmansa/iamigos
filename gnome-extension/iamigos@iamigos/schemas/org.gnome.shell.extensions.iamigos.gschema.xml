@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.iamigos" path="/org/gnome/shell/extensions/iamigos/">
+
+    <key name="language" type="s">
+      <choices>
+        <choice value="auto"/>
+        <choice value="en"/>
+        <choice value="es"/>
+      </choices>
+      <default>'auto'</default>
+      <summary>Interface language</summary>
+      <description>"auto" follows the system language.</description>
+    </key>
+
+    <key name="panel-position" type="s">
+      <choices>
+        <choice value="left"/>
+        <choice value="center"/>
+        <choice value="right"/>
+      </choices>
+      <default>'right'</default>
+      <summary>Where in the top bar the critters go</summary>
+    </key>
+
+    <key name="pixel-size" type="i">
+      <range min="1" max="4"/>
+      <default>2</default>
+      <summary>Size of each sprite pixel, in logical pixels</summary>
+    </key>
+
+    <key name="max-pets" type="i">
+      <range min="0" max="30"/>
+      <default>8</default>
+      <summary>Critters shown before the rest are grouped into a "+N" counter (0 = no limit)</summary>
+    </key>
+
+    <key name="sleep-minutes" type="i">
+      <range min="0" max="240"/>
+      <default>10</default>
+      <summary>Minutes done or idle before a critter falls asleep (0 = never)</summary>
+    </key>
+
+    <key name="long-wait-seconds" type="i">
+      <range min="0" max="3600"/>
+      <default>120</default>
+      <summary>Seconds waiting for permission or an answer before the critter insists (0 = never)</summary>
+    </key>
+
+    <key name="show-subagents" type="b">
+      <default>true</default>
+      <summary>Show running subagents as mini critters</summary>
+    </key>
+
+    <key name="menu-details" type="b">
+      <default>true</default>
+      <summary>Show details in the menu (tool, turn time, git branch, context)</summary>
+    </key>
+
+    <key name="show-claude" type="b">
+      <default>true</default>
+      <summary>Show Claude Code sessions</summary>
+    </key>
+
+    <key name="show-opencode" type="b">
+      <default>true</default>
+      <summary>Show OpenCode sessions</summary>
+    </key>
+  </schema>
+</schemalist>

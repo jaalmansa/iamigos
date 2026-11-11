@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""IAmigos — hook de Claude Code.
+"""IAmigos — Claude Code hook.
 
-Lee el JSON del evento por stdin, lo traduce a un estado y lo escribe en
-$XDG_STATE_HOME/iamigos/sessions/claude-<session_id>.json (escritura atómica).
+Reads the event JSON from stdin, turns it into a state and writes it to
+$XDG_STATE_HOME/iamigos/sessions/claude-<session_id>.json (atomically).
 
-Nunca debe romper la sesión: cualquier error se ignora y se sale con 0, sin
-escribir nada en stdout (Claude Code interpreta el stdout de algunos hooks).
+It must never break the session: any error is ignored and it exits with 0,
+without writing anything to stdout (Claude Code reads the stdout of some hooks).
 """
 import json
 import os
@@ -18,12 +18,12 @@ STATE_DIR = os.path.join(
     "sessions",
 )
 
-# Herramientas que significan "te está preguntando algo".
+# Tools that mean "it is asking you something".
 ASKING_TOOLS = {"AskUserQuestion", "ExitPlanMode"}
 
 
 def map_event(ev, prev_state):
-    """Devuelve (estado, detalle) o (None, None) si el evento no cambia nada."""
+    """Returns (state, detail), or (None, None) if the event changes nothing."""
     name = ev.get("hook_event_name", "")
     tool = ev.get("tool_name") or ""
 
@@ -45,7 +45,7 @@ def map_event(ev, prev_state):
             return "permission", ev.get("message", "")
         if kind == "elicitation_dialog":
             return "asking", ev.get("message", "")
-        return None, None  # idle_prompt, auth_success…: la extensión gestiona el sueño
+        return None, None  # idle_prompt, auth_success…: the extension handles sleeping
     if name == "PreCompact":
         return "compacting", ev.get("trigger", "")
     if name == "Stop":
@@ -57,8 +57,56 @@ def map_event(ev, prev_state):
     return None, None
 
 
+def context_usage(transcript_path):
+    """(tokens, model) of the main agent's last response in the transcript.
+
+    The context in use is what went into that request: input + cache read + cache created.
+    Only the end of the file is read, as it can be large.
+    """
+    if not transcript_path:
+        return None, None
+    try:
+        with open(transcript_path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 512 * 1024))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return None, None
+    for line in reversed(lines):
+        if '"usage"' not in line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get("isSidechain"):
+            continue
+        msg = entry.get("message") or {}
+        usage = msg.get("usage") or {}
+        if not usage:
+            continue
+        tokens = (usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+                  + usage.get("cache_creation_input_tokens", 0))
+        return tokens, msg.get("model")
+    return None, None
+
+
+def update_subagents(name, ev, prev_list):
+    """List of live subagents: [{id, type, since}]."""
+    if name in ("SessionStart", "SessionEnd"):
+        return []
+    subs = [s for s in (prev_list or []) if isinstance(s, dict)]
+    agent_id = ev.get("agent_id")
+    if name == "SubagentStart" and agent_id and not any(s.get("id") == agent_id for s in subs):
+        subs.append({"id": agent_id, "type": ev.get("agent_type") or "", "since": time.time()})
+    elif name == "SubagentStop" and agent_id:
+        subs = [s for s in subs if s.get("id") != agent_id]
+    return subs
+
+
 def mux_info():
-    """Dónde vive la sesión dentro de zellij/tmux, para que la extensión salte a su panel."""
+    """Where the session lives inside zellij/tmux, so the extension can jump to its pane."""
     env = os.environ
     if env.get("ZELLIJ_SESSION_NAME") and env.get("ZELLIJ_PANE_ID"):
         return {"kind": "zellij", "session": env["ZELLIJ_SESSION_NAME"], "pane": env["ZELLIJ_PANE_ID"]}
@@ -68,7 +116,7 @@ def mux_info():
 
 
 def find_agent_pid():
-    """Sube por los ancestros hasta encontrar el proceso de Claude Code."""
+    """Walks up the parent processes until it finds Claude Code."""
     pid = os.getppid()
     for _ in range(8):
         if pid <= 1:
@@ -86,7 +134,7 @@ def find_agent_pid():
             return pid
         try:
             with open(f"/proc/{pid}/stat") as f:
-                # el campo comm puede tener espacios: partir tras el último ')'
+                # the comm field may contain spaces: split after the last ')'
                 pid = int(f.read().rsplit(")", 1)[1].split()[1])
         except (OSError, ValueError, IndexError):
             break
@@ -107,11 +155,31 @@ def main():
     except (OSError, ValueError):
         pass
 
+    name = ev.get("hook_event_name", "")
     state, detail = map_event(ev, prev.get("state"))
+    subagents = update_subagents(name, ev, prev.get("subagents"))
     if state is None:
-        return
+        if subagents == (prev.get("subagents") or []) or not prev:
+            return
+        state, detail = prev.get("state", "working"), prev.get("detail", "")
 
     now = time.time()
+
+    # Turn time: starts with the prompt and ends with Stop/StopFailure.
+    turn_started, turn_ended = prev.get("turn_started"), prev.get("turn_ended")
+    if name == "UserPromptSubmit":
+        turn_started, turn_ended = now, None
+    elif name in ("Stop", "StopFailure"):
+        turn_ended = now
+
+    # Context in use: re-read from the transcript on the events that change it.
+    tokens, model = prev.get("tokens"), prev.get("model")
+    if name in ("Stop", "StopFailure", "PostToolUse", "PostToolUseFailure", "SessionStart"):
+        t, m = context_usage(ev.get("transcript_path"))
+        if t is not None:
+            tokens, model = t, m or model
+    elif name == "PostCompact":
+        tokens = None   # unknown until the next response
     cwd = ev.get("cwd") or prev.get("cwd") or ""
     data = {
         "v": 1,
@@ -123,6 +191,11 @@ def main():
         "project": os.path.basename(cwd.rstrip("/")) or "?",
         "pid": prev.get("pid") or find_agent_pid(),
         "mux": prev.get("mux") or mux_info(),
+        "turn_started": turn_started,
+        "turn_ended": turn_ended,
+        "tokens": tokens,
+        "model": model,
+        "subagents": subagents,
         "started": prev.get("started") or now,
         "since": now if prev.get("state") != state else prev.get("since", now),
         "updated": now,

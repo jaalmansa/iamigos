@@ -1,0 +1,42 @@
+# Lint, type check and tests on every push and pull request.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24: the tests import the OpenCode plugin (.ts) directly.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check (OpenCode plugin)
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Preferences schema compiles
+        run: |
+          sudo apt-get install -y --no-install-recommends libglib2.0-bin >/dev/null
+          glib-compile-schemas --strict --dry-run gnome-extension/iamigos@iamigos/schemas

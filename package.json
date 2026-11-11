@@ -1,7 +1,7 @@
 {
   "name": "iamigos",
   "version": "0.1.0",
-  "description": "Un bicho pixel art en la barra superior de GNOME por cada sesión activa de Claude Code u OpenCode.",
+  "description": "Pixel-art critters in the GNOME top bar showing what your Claude Code and OpenCode sessions are doing.",
   "license": "MIT",
   "author": "jaalmansa",
   "repository": {
@@ -20,11 +20,16 @@
     "bin/",
     "gnome-extension/",
     "hooks/iamigos-hook",
-    "opencode/iamigos.ts"
+    "opencode/iamigos.ts",
+    "!gnome-extension/**/gschemas.compiled"
   ],
   "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p test/tsconfig.json",
+    "test": "node --test test/ && python3 -m unittest discover -s test -p 'test_*.py'",
+    "check": "npm run lint && npm run typecheck && npm test",
     "dev-install": "node bin/iamigos.mjs install --link",
-    "pack-extension": "gnome-extensions pack gnome-extension/iamigos@iamigos --force --out-dir dist"
+    "pack-extension": "glib-compile-schemas gnome-extension/iamigos@iamigos/schemas && gnome-extensions pack gnome-extension/iamigos@iamigos --force --out-dir dist --extra-source=sprites.js --extra-source=i18n.js --extra-source=strings.js --schema=schemas/org.gnome.shell.extensions.iamigos.gschema.xml"
   },
   "keywords": [
     "gnome-shell",
@@ -42,5 +47,13 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@opencode-ai/plugin": "^1.19.5",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "typescript": "^5.6.3"
   }
 }
