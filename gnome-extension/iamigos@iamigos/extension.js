@@ -451,6 +451,13 @@ class IAmigosIndicator extends PanelMenu.Button {
         });
 
         this.visible = visible.length > 0;
+        this._order = visible;
+
+        // GNOME no abre un menú vacío (PopupMenu.open() sale si isEmpty()), así que
+        // hay que tenerlo construido antes del clic; al abrirse se reconstruye para
+        // poner los tiempos al día. Abierto no se toca, para que no parpadee.
+        if (!this.menu.isOpen)
+            this._buildMenu();
     }
 
     _forget(name) {
@@ -465,7 +472,7 @@ class IAmigosIndicator extends PanelMenu.Button {
     _buildMenu() {
         this.menu.removeAll();
         const now = Date.now() / 1000;
-        const names = [...this._pets.keys()];
+        const names = this._order ?? [];
 
         if (!names.length) {
             this.menu.addMenuItem(new PopupMenu.PopupMenuItem('Sin sesiones activas', {reactive: false}));
