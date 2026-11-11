@@ -1,0 +1,60 @@
+# Publica una versión al subir una etiqueta vX.Y.Z:
+#   1. comprueba que la etiqueta coincide con la versión de package.json
+#   2. publica el paquete en npm (público)
+#   3. crea la Release de GitHub con el zip de la extensión de GNOME
+#
+# Uso:  npm version patch   (sube la versión, hace commit y crea la etiqueta)
+#       git push --follow-tags
+#
+# Requiere el secreto NPM_TOKEN (token «Automation» o «Granular» con permiso de publicación).
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: La etiqueta coincide con package.json
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::La etiqueta es $GITHUB_REF_NAME pero package.json dice $pkg"
+            exit 1
+          fi
+
+      - name: Comprobaciones básicas
+        run: |
+          node --check bin/iamigos.mjs
+          node --check --input-type=module < gnome-extension/iamigos@iamigos/extension.js
+          node --check --input-type=module < gnome-extension/iamigos@iamigos/sprites.js
+          python3 -m py_compile hooks/iamigos-hook
+
+      - name: Publicar en npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Empaquetar la extensión
+        run: |
+          mkdir -p dist
+          cd gnome-extension/iamigos@iamigos
+          zip -r "../../dist/iamigos@iamigos.shell-extension.zip" . -x '*.tmp'
+
+      - name: Crear la Release
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

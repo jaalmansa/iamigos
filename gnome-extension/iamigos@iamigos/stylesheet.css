@@ -1,0 +1,33 @@
+.iamigos-box {
+  spacing: 3px;
+}
+
+.iamigos-pet {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 0 1px;
+}
+
+.iamigos-pet.permission {
+  background-color: #f07b1d;
+  border-color: #f07b1d;
+}
+
+.iamigos-pet.asking {
+  background-color: #5a2f12;
+  border-color: #f07b1d;
+}
+
+.iamigos-pet.done {
+  border-color: #4cd964;
+}
+
+.iamigos-pet.error {
+  border-color: #ff4d4d;
+}
+
+.iamigos-agent-tag {
+  font-size: 0.8em;
+  color: #9a9aa2;
+  margin-left: 12px;
+}

@@ -1,0 +1,6 @@
+__pycache__/
+*.tmp
+dist/
+*.tgz
+node_modules/
+docs/sprites.html

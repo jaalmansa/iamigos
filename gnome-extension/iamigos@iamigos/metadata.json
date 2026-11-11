@@ -1,0 +1,7 @@
+{
+  "uuid": "iamigos@iamigos",
+  "name": "IAmigos",
+  "description": "Un bicho pixel art en la barra superior por cada sesión activa de Claude Code u OpenCode: trabajando, pide permiso, te pregunta, compactando, terminado, durmiendo, error o cerrada.",
+  "shell-version": ["48", "49", "50"],
+  "version": 1
+}

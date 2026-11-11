@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""IAmigos — hook de Claude Code.
+
+Lee el JSON del evento por stdin, lo traduce a un estado y lo escribe en
+$XDG_STATE_HOME/iamigos/sessions/claude-<session_id>.json (escritura atómica).
+
+Nunca debe romper la sesión: cualquier error se ignora y se sale con 0, sin
+escribir nada en stdout (Claude Code interpreta el stdout de algunos hooks).
+"""
+import json
+import os
+import sys
+import time
+
+STATE_DIR = os.path.join(
+    os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
+    "iamigos",
+    "sessions",
+)
+
+# Herramientas que significan "te está preguntando algo".
+ASKING_TOOLS = {"AskUserQuestion", "ExitPlanMode"}
+
+
+def map_event(ev, prev_state):
+    """Devuelve (estado, detalle) o (None, None) si el evento no cambia nada."""
+    name = ev.get("hook_event_name", "")
+    tool = ev.get("tool_name") or ""
+
+    if name == "SessionStart":
+        return "idle", ev.get("source", "")
+    if name == "UserPromptSubmit":
+        return "working", ""
+    if name == "PreToolUse":
+        if tool in ASKING_TOOLS:
+            return "asking", tool
+        return "working", tool
+    if name in ("PostToolUse", "PostToolUseFailure", "PermissionDenied", "SubagentStart", "PostCompact"):
+        return "working", tool
+    if name == "PermissionRequest":
+        return "permission", tool
+    if name == "Notification":
+        kind = ev.get("notification_type", "")
+        if kind == "permission_prompt":
+            return "permission", ev.get("message", "")
+        if kind == "elicitation_dialog":
+            return "asking", ev.get("message", "")
+        return None, None  # idle_prompt, auth_success…: la extensión gestiona el sueño
+    if name == "PreCompact":
+        return "compacting", ev.get("trigger", "")
+    if name == "Stop":
+        return "done", ""
+    if name == "StopFailure":
+        return "error", str(ev.get("error") or ev.get("message") or "")[:200]
+    if name == "SessionEnd":
+        return "closed", ev.get("reason", "")
+    return None, None
+
+
+def mux_info():
+    """Dónde vive la sesión dentro de zellij/tmux, para que la extensión salte a su panel."""
+    env = os.environ
+    if env.get("ZELLIJ_SESSION_NAME") and env.get("ZELLIJ_PANE_ID"):
+        return {"kind": "zellij", "session": env["ZELLIJ_SESSION_NAME"], "pane": env["ZELLIJ_PANE_ID"]}
+    if env.get("TMUX") and env.get("TMUX_PANE"):
+        return {"kind": "tmux", "socket": env["TMUX"].split(",")[0], "pane": env["TMUX_PANE"]}
+    return None
+
+
+def find_agent_pid():
+    """Sube por los ancestros hasta encontrar el proceso de Claude Code."""
+    pid = os.getppid()
+    for _ in range(8):
+        if pid <= 1:
+            break
+        try:
+            exe = os.readlink(f"/proc/{pid}/exe")
+        except OSError:
+            exe = ""
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                comm = f.read().strip()
+        except OSError:
+            comm = ""
+        if "claude" in comm or "/claude/" in exe:
+            return pid
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                # el campo comm puede tener espacios: partir tras el último ')'
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return os.getppid()
+
+
+def main():
+    ev = json.load(sys.stdin)
+    sid = ev.get("session_id")
+    if not sid:
+        return
+    path = os.path.join(STATE_DIR, f"claude-{sid}.json")
+
+    prev = {}
+    try:
+        with open(path) as f:
+            prev = json.load(f)
+    except (OSError, ValueError):
+        pass
+
+    state, detail = map_event(ev, prev.get("state"))
+    if state is None:
+        return
+
+    now = time.time()
+    cwd = ev.get("cwd") or prev.get("cwd") or ""
+    data = {
+        "v": 1,
+        "agent": "claude",
+        "id": sid,
+        "state": state,
+        "detail": detail or "",
+        "cwd": cwd,
+        "project": os.path.basename(cwd.rstrip("/")) or "?",
+        "pid": prev.get("pid") or find_agent_pid(),
+        "mux": prev.get("mux") or mux_info(),
+        "started": prev.get("started") or now,
+        "since": now if prev.get("state") != state else prev.get("since", now),
+        "updated": now,
+    }
+
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    os.replace(tmp, path)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        pass
+    sys.exit(0)

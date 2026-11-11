@@ -1,0 +1,46 @@
+{
+  "name": "iamigos",
+  "version": "0.1.0",
+  "description": "Un bicho pixel art en la barra superior de GNOME por cada sesión activa de Claude Code u OpenCode.",
+  "license": "MIT",
+  "author": "jaalmansa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaalmansa/iamigos.git"
+  },
+  "homepage": "https://github.com/jaalmansa/iamigos#readme",
+  "bugs": {
+    "url": "https://github.com/jaalmansa/iamigos/issues"
+  },
+  "type": "module",
+  "bin": {
+    "iamigos": "bin/iamigos.mjs"
+  },
+  "files": [
+    "bin/",
+    "gnome-extension/",
+    "hooks/iamigos-hook",
+    "opencode/iamigos.ts"
+  ],
+  "scripts": {
+    "dev-install": "node bin/iamigos.mjs install --link",
+    "pack-extension": "gnome-extensions pack gnome-extension/iamigos@iamigos --force --out-dir dist"
+  },
+  "keywords": [
+    "gnome-shell",
+    "gnome-extension",
+    "claude-code",
+    "opencode",
+    "pixel-art"
+  ],
+  "os": [
+    "linux"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
