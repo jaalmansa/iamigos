@@ -66,5 +66,20 @@
       <default>true</default>
       <summary>Show OpenCode sessions</summary>
     </key>
+
+    <key name="show-whip" type="b">
+      <default>true</default>
+      <summary>Show the whip to the right of the critters</summary>
+    </key>
+
+    <key name="whip-total" type="i">
+      <default>0</default>
+      <summary>Lashes given so far</summary>
+    </key>
+
+    <key name="whip-best" type="i">
+      <default>0</default>
+      <summary>Longest whip combo so far</summary>
+    </key>
   </schema>
 </schemalist>

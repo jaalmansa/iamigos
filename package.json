@@ -29,7 +29,7 @@
     "test": "node --test 'test/*.test.mjs' && python3 -m unittest discover -s test -p 'test_*.py'",
     "check": "npm run lint && npm run typecheck && npm test",
     "dev-install": "node bin/iamigos.mjs install --link",
-    "pack-extension": "glib-compile-schemas gnome-extension/iamigos@iamigos/schemas && gnome-extensions pack gnome-extension/iamigos@iamigos --force --out-dir dist --extra-source=sprites.js --extra-source=i18n.js --extra-source=strings.js --schema=schemas/org.gnome.shell.extensions.iamigos.gschema.xml"
+    "pack-extension": "glib-compile-schemas gnome-extension/iamigos@iamigos/schemas && gnome-extensions pack gnome-extension/iamigos@iamigos --force --out-dir dist --extra-source=sprites.js --extra-source=i18n.js --extra-source=strings.js --extra-source=whip.js --schema=schemas/org.gnome.shell.extensions.iamigos.gschema.xml"
   },
   "keywords": [
     "gnome-shell",
