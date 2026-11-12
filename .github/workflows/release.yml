@@ -1,8 +1,9 @@
 # Publishes a release when a vX.Y.Z tag is pushed:
-#   1. checks that the tag matches the version in package.json
-#   2. runs lint, type check and tests
-#   3. publishes the package to npm (public)
-#   4. creates the GitHub Release with the GNOME extension zip
+#   1. checks that the tag matches the version in package.json, and runs lint, type check and tests
+#   2. builds the desktop app for macOS (arm64, x64) and Windows (x64, arm64)
+#   3. creates the GitHub Release with the app zips and the GNOME extension zip
+#   4. publishes the package to npm (public), last: `npx iamigos install` downloads
+#      the app from the Release of its own version, so that Release must exist first
 #
 # Usage:  npm version patch   (bumps the version, commits and tags)
 #         git push --follow-tags
@@ -19,7 +20,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +28,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Tag matches package.json
         run: |
@@ -42,16 +46,50 @@ jobs:
           npm ci
           npm run check
 
-      - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  desktop:
+    needs: check
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build the app
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ runner.os }}
+          path: desktop/dist/*.zip
+
+  release:
+    needs: desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Package the extension
         run: |
           sudo apt-get install -y --no-install-recommends libglib2.0-bin >/dev/null
           glib-compile-schemas gnome-extension/iamigos@iamigos/schemas
-          mkdir -p dist
           cd gnome-extension/iamigos@iamigos
           zip -r "../../dist/iamigos@iamigos.shell-extension.zip" . -x '*.tmp'
 
@@ -59,3 +97,8 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

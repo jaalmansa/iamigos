@@ -1,4 +1,6 @@
-# Lint, type check and tests on every push and pull request.
+# Lint, type check and tests on every push and pull request, on Linux, macOS and
+# Windows; plus a build of the desktop app (its zips are kept as artifacts, to try
+# a pull request on a real Mac or PC).
 name: ci
 
 on:
@@ -11,7 +13,11 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +43,35 @@ jobs:
         run: npm test
 
       - name: Preferences schema compiles
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y --no-install-recommends libglib2.0-bin >/dev/null
           glib-compile-schemas --strict --dry-run gnome-extension/iamigos@iamigos/schemas
+
+  desktop:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Build the app
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iamigos-${{ runner.os }}
+          path: desktop/dist/*.zip
+          retention-days: 14

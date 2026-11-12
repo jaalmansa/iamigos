@@ -12,7 +12,7 @@ const rules = {
 };
 
 export default [
-    {ignores: ['dist/', 'node_modules/', 'docs/', 'opencode/']},
+    {ignores: ['**/dist/', '**/node_modules/', 'docs/', 'opencode/', 'desktop/src/shared/']},
     js.configs.recommended,
 
     // GNOME Shell extension and its preferences (GJS).
@@ -36,12 +36,24 @@ export default [
 
     // Installer, tools and tests (Node).
     {
-        files: ['bin/**/*.mjs', 'tools/**/*.mjs', 'test/**/*.mjs', '*.js'],
+        files: ['bin/**/*.mjs', 'tools/**/*.mjs', 'test/**/*.mjs', '*.js', 'desktop/**/*.mjs'],
         languageOptions: {
             ecmaVersion: 2024,
             sourceType: 'module',
             globals: globals.node,
         },
+        rules,
+    },
+
+    // Desktop app: CommonJS bits (preload, electron-builder config) and the strip page.
+    {
+        files: ['desktop/**/*.cjs'],
+        languageOptions: {ecmaVersion: 2024, sourceType: 'commonjs', globals: globals.node},
+        rules,
+    },
+    {
+        files: ['desktop/src/strip/strip.js'],
+        languageOptions: {ecmaVersion: 2024, sourceType: 'script', globals: globals.browser},
         rules,
     },
 ];

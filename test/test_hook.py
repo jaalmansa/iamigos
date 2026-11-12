@@ -154,6 +154,14 @@ class HookTest(unittest.TestCase):
         self.emit("SessionStart", env={"TMUX": "/tmp/tmux-1000/default,123,0", "TMUX_PANE": "%7"})
         self.assertEqual(self.session()["mux"], {"kind": "tmux", "socket": "/tmp/tmux-1000/default", "pane": "%7"})
 
+    def test_records_wezterm_and_kitty_ids(self):
+        self.emit("SessionStart", env={"WEZTERM_PANE": "4"})
+        self.assertEqual(self.session()["term"]["wezterm_pane"], "4")
+        os.remove(self.path)
+        self.emit("SessionStart", env={"KITTY_WINDOW_ID": "9", "KITTY_LISTEN_ON": "unix:/tmp/k"})
+        self.assertEqual(self.session()["term"]["kitty_window"], "9")
+        self.assertEqual(self.session()["term"]["kitty_listen"], "unix:/tmp/k")
+
     def test_plain_terminal_has_no_mux(self):
         self.emit("SessionStart")
         self.assertIsNone(self.session()["mux"])
@@ -170,6 +178,102 @@ class HookTest(unittest.TestCase):
         self.emit("Stop")
         leftovers = [f for f in os.listdir(os.path.dirname(self.path)) if f.endswith(".tmp")]
         self.assertEqual(leftovers, [])
+
+
+def load_hook():
+    """The hook as a module, to test its helpers one by one."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("iamigos_hook", HOOK)
+    module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(module)
+    return module
+
+
+class HelpersTest(unittest.TestCase):
+    """Platform-dependent helpers, with fake process tables."""
+
+    def setUp(self):
+        self.hook = load_hook()
+
+    def walk(self, table):
+        """find_agent_pid with a fake table {pid: (name, exe, ppid)}, starting at our parent."""
+        from unittest import mock
+        with mock.patch.object(self.hook.os, "getppid", return_value=100):
+            return self.hook.find_agent_pid(lambda pid: table.get(pid, ("", "", 0)))
+
+    def test_finds_claude_among_the_ancestors(self):
+        table = {100: ("bash", "/bin/bash", 90), 90: ("claude", "/home/me/.local/bin/claude", 80)}
+        self.assertEqual(self.walk(table), 90)
+
+    def test_finds_claude_exe_on_windows(self):
+        table = {100: ("bash.exe", "bash.exe", 90), 90: ("claude.exe", "claude.exe", 4)}
+        self.assertEqual(self.walk(table), 90)
+
+    def test_falls_back_to_the_parent(self):
+        self.assertEqual(self.walk({100: ("bash", "/bin/bash", 1)}), 100)
+        self.assertEqual(self.walk({}), 100)
+
+    def test_picks_a_reader_per_platform(self):
+        self.assertIs(self.hook.proc_reader("linux"), self.hook._proc_linux)
+        self.assertIs(self.hook.proc_reader("darwin"), self.hook._proc_darwin)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "needs /proc")
+    def test_reads_proc_on_linux(self):
+        comm, exe, ppid = self.hook._proc_linux(os.getpid())
+        self.assertTrue(comm.startswith("python"))
+        self.assertEqual(ppid, os.getppid())
+
+    @unittest.skipUnless(sys.platform == "darwin", "needs macOS")
+    def test_reads_ps_on_macos(self):
+        comm, _exe, ppid = self.hook._proc_darwin(os.getpid())
+        self.assertIn("python", comm.lower())
+        self.assertEqual(ppid, os.getppid())
+
+    @unittest.skipUnless(sys.platform == "win32", "needs Windows")
+    def test_reads_toolhelp_on_windows(self):
+        name, _exe, ppid = self.hook.proc_reader("win32")(os.getpid())
+        self.assertIn("python", name.lower())
+        self.assertEqual(ppid, os.getppid())
+
+    def test_project_name_from_any_path(self):
+        cases = {"/home/me/api": "api", "/home/me/api/": "api", "C:\\Users\\me\\web": "web",
+                 "C:\\Users\\me\\web\\": "web", "": "?", "/": "?"}
+        for cwd, name in cases.items():
+            with self.subTest(cwd=cwd):
+                self.assertEqual(self.hook.project_name(cwd), name)
+
+    def test_replace_retries_while_the_file_is_busy(self):
+        from unittest import mock
+        real = os.replace
+        calls = []
+
+        def busy_twice(src, dst):
+            calls.append(src)
+            if len(calls) < 3:
+                raise PermissionError("in use")
+            real(src, dst)
+
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = os.path.join(d, "a.tmp"), os.path.join(d, "a.json")
+            with open(src, "w") as f:
+                f.write("{}")
+            with mock.patch.object(self.hook.os, "replace", busy_twice), \
+                    mock.patch.object(self.hook.time, "sleep"):
+                self.hook.replace(src, dst)
+            self.assertEqual(len(calls), 3)
+            self.assertTrue(os.path.exists(dst))
+
+    def test_replace_gives_up_eventually(self):
+        from unittest import mock
+
+        def always_busy(_src, _dst):
+            raise PermissionError("in use")
+
+        with mock.patch.object(self.hook.os, "replace", always_busy), \
+                mock.patch.object(self.hook.time, "sleep"):
+            with self.assertRaises(PermissionError):
+                self.hook.replace("a", "b", tries=3)
 
 
 if __name__ == "__main__":
