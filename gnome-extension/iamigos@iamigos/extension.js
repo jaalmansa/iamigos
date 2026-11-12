@@ -17,8 +17,10 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {
     CHARACTERS, BADGES, SPRITE_W, SPRITE_H,
     makePalette, greyPalette, pickLook, lowestEyeRows, shade,
+    WHIP_MARK, WHIP_ICON, lashPixels, tint,
 } from './sprites.js';
 import {setLanguage, t} from './i18n.js';
+import {Combo, TIERS} from './whip.js';
 
 const STATE_DIR = GLib.build_filenamev([GLib.get_user_state_dir(), 'iamigos', 'sessions']);
 
@@ -28,6 +30,10 @@ const TICK_MS = 200;           // animation
 const REFRESH_EVERY = 25;      // ticks between process checks (5 s)
 const SUBAGENT_STALE = 3 * 3600; // s: a subagent with no SubagentStop for this long is considered gone
 const MAX_MINIS = 4;           // most subagent mini critters drawn
+
+const HURT_FRAMES = 3;          // ticks a whipped critter flinches
+const CRACK_FRAMES = 2;         // ticks the whip button shows its spark
+const LASH = lashPixels();
 
 const AGENT_LABELS = {claude: 'Claude', opencode: 'OpenCode'};
 
@@ -247,13 +253,19 @@ function focusSession(session) {
 const Pet = GObject.registerClass(
 class IAmigosPet extends St.Bin {
     _init(project, ordinal, pixel) {
-        super._init({style_class: 'iamigos-pet', y_align: Clutter.ActorAlign.CENTER});
+        // Reactive for the hover hint; a left click jumps to its session (Indicator._routeClicks).
+        super._init({
+            style_class: 'iamigos-pet', y_align: Clutter.ActorAlign.CENTER,
+            reactive: true, track_hover: true,
+        });
 
         this._grey = greyPalette();
         this._view = null;
         this._urgent = false;
         this._subs = 0;
         this.frame = 0;
+        this._whipAt = -Infinity;      // frame of the last lash
+        this._rushUntil = -1;          // runs faster until this frame
         this.setLook(project, ordinal);
 
         const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
@@ -283,6 +295,7 @@ class IAmigosPet extends St.Bin {
         this._grid = shade(CHARACTERS[look.character]);
         this._eyeRows = lowestEyeRows(this._grid);
         this._palette = makePalette(look.hue);
+        this._hurtPalette = tint(this._palette, '#ff3b30', 0.45);
         this._area?.queue_repaint();
         this._mini?.queue_repaint();
     }
@@ -315,9 +328,18 @@ class IAmigosPet extends St.Bin {
         this._mini.queue_repaint();
     }
 
+    // A lash: flinches for a moment, then runs faster for `rush` ticks.
+    whip(frame, rush) {
+        this.frame = frame;
+        this._whipAt = frame;
+        this._rushUntil = Math.max(this._rushUntil, frame + rush);
+        this._area.queue_repaint();
+    }
+
     tick(frame) {
         this.frame = frame;
-        if (this._urgent || ['working', 'compacting', 'background', 'asleep', 'permission', 'asking'].includes(this._view))
+        if (this._urgent || frame <= this._rushUntil + 1 ||
+            ['working', 'compacting', 'background', 'asleep', 'permission', 'asking'].includes(this._view))
             this._area.queue_repaint();
         if (this._subs)
             this._mini.queue_repaint();
@@ -344,15 +366,25 @@ class IAmigosPet extends St.Bin {
         const px = this._px;
         const view = this._view;
         const f = this.frame;
-        const pal = view === 'closed' ? this._grey : this._palette;
+        const sinceLash = f - this._whipAt;
+        const hurt = view !== 'closed' && sinceLash < HURT_FRAMES;
+        let pal = view === 'closed' ? this._grey : this._palette;
         const alpha = view === 'closed' ? 0.6 : 1;
-        const eyesClosed = view === 'asleep' || view === 'closed';
+        let eyesClosed = view === 'asleep' || view === 'closed';
 
         let ox = 0, oy = 1;
         if (view === 'working' && f % 4 < 2)
             oy = 0;                         // hops
+        if (view !== 'closed' && f <= this._rushUntil)
+            oy = f % 2;                     // whipped: hops twice as fast
         if (view === 'compacting' || this._urgent)
             ox = f % 2;                     // shakes (compacting, or waiting for too long)
+        if (hurt) {                         // flinches, squeezes its eyes, flashes red
+            ox = [2, 0, 1][sinceLash];
+            eyesClosed = true;
+            if (sinceLash === 0)
+                pal = this._hurtPalette;
+        }
 
         const dot = (x, y, rgb, a = 1) => {
             cr.setSourceRGBA(rgb[0], rgb[1], rgb[2], a);
@@ -362,9 +394,22 @@ class IAmigosPet extends St.Bin {
 
         this._sprite(cr, px, ox, oy, pal, alpha, eyesClosed);
 
-        // State indicator in the top right corner.
+        // The lash itself, fading on the next tick.
+        if (hurt && sinceLash < 2)
+            LASH.forEach(([x, y]) => dot(ox + x, oy + y, [1, 1, 1], sinceLash ? 0.45 : 0.95));
+
+        // State indicator in the top right corner (an anger mark while it hurts).
         const cols = SPRITE_W + 3;
-        if (view === 'working' || view === 'compacting' || view === 'background') {
+        if (hurt) {
+            const rgb = makePalette(WHIP_MARK.color).b;
+            const w = WHIP_MARK.rows[0].length;
+            WHIP_MARK.rows.forEach((row, y) => {
+                [...row].forEach((ch, x) => {
+                    if (ch === 'x')
+                        dot(cols - w + x, y, rgb);
+                });
+            });
+        } else if (view === 'working' || view === 'compacting' || view === 'background') {
             const rgb = {working: [1, 1, 1], compacting: [0.75, 0.6, 1], background: [0.35, 0.8, 1]}[view];
             const n = Math.floor(f / (view === 'background' ? 4 : 2)) % 4;
             for (let i = 0; i < n; i++)
@@ -403,6 +448,58 @@ class IAmigosPet extends St.Bin {
     }
 });
 
+// The whip, to the right of the critters: a left click lashes all of them (Indicator._routeClicks).
+const WhipButton = GObject.registerClass(
+class IAmigosWhipButton extends St.Bin {
+    _init(pixel) {
+        super._init({
+            style_class: 'iamigos-whip', y_align: Clutter.ActorAlign.CENTER,
+            reactive: true, track_hover: true,
+        });
+        this._crackAt = -Infinity;
+        this._frame = 0;
+        this._colors = Object.fromEntries(Object.entries(WHIP_ICON.colors)
+            .map(([k, hex]) => [k, makePalette(hex).b]));
+        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        this._px = pixel * scale;
+        this._area = new St.DrawingArea({
+            width: WHIP_ICON.rows[0].length * this._px,
+            height: (WHIP_ICON.rows.length + 1) * this._px,
+        });
+        this._area.connect('repaint', area => this._paint(area));
+        this.set_child(this._area);
+    }
+
+    crack(frame) {
+        this._frame = this._crackAt = frame;
+        this._area.queue_repaint();
+    }
+
+    tick(frame) {
+        this._frame = frame;
+        if (frame - this._crackAt <= CRACK_FRAMES)
+            this._area.queue_repaint();
+    }
+
+    _paint(area) {
+        const cr = area.get_context();
+        const px = this._px;
+        const cracking = this._frame - this._crackAt < CRACK_FRAMES;
+        const oy = cracking ? 0 : 1;        // jerks up as it cracks
+        WHIP_ICON.rows.forEach((row, y) => {
+            [...row].forEach((ch, x) => {
+                if (ch === '.' || (ch === 'x' && !cracking))
+                    return;
+                const rgb = this._colors[ch];
+                cr.setSourceRGBA(rgb[0], rgb[1], rgb[2], 1);
+                cr.rectangle(x * px, (y + oy) * px, px, px);
+                cr.fill();
+            });
+        });
+        cr.$dispose();
+    }
+});
+
 const Indicator = GObject.registerClass(
 class IAmigosIndicator extends PanelMenu.Button {
     _init(settings, openPrefs) {
@@ -413,6 +510,14 @@ class IAmigosIndicator extends PanelMenu.Button {
         this._box = new St.BoxLayout({style_class: 'iamigos-box'});
         this.add_child(this._box);
         this._more = new St.Label({style_class: 'iamigos-more', y_align: Clutter.ActorAlign.CENTER, visible: false});
+        // The combo floats under the whip, above the windows, and outside the
+        // panel button: it takes no room in the bar (the whip does not move
+        // while you click) and lets clicks through (no menu by accident).
+        this._comboLabel = new St.Label({style_class: 'iamigos-combo', visible: false, reactive: false});
+        this._comboLabel.set_pivot_point(0.5, 0.5);
+        Main.uiGroup.add_child(this._comboLabel);
+        this._combo = new Combo();
+        this._whipButton = null;
 
         this._sessions = new Map();   // file name -> data
         this._pets = new Map();       // file name -> Pet
@@ -422,12 +527,20 @@ class IAmigosIndicator extends PanelMenu.Button {
 
         // Settings: a new size means rebuilding the critters; anything else, a refresh.
         this._settingsIds = [
-            settings.connect('changed::pixel-size', () => this._clearPets()),
+            settings.connect('changed::pixel-size', () => {
+                this._whipButton?.destroy();
+                this._whipButton = null;
+                this._clearPets();
+            }),
             settings.connect('changed::language', () => {
                 setLanguage(settings.get_string('language'));
                 this._refresh();
             }),
-            settings.connect('changed', () => this._refresh()),
+            // The whip counters change on every lash: no need to refresh for them.
+            settings.connect('changed', (_s, key) => {
+                if (!key.startsWith('whip-'))
+                    this._refresh();
+            }),
         ];
 
         GLib.mkdir_with_parents(STATE_DIR, 0o755);
@@ -436,6 +549,7 @@ class IAmigosIndicator extends PanelMenu.Button {
         this._monitor.connect('changed', () => this._scheduleReload());
 
         this.menu.actor.add_style_class_name('iamigos-menu');
+        this._routeClicks();
         this.menu.connect('open-state-changed', (_m, open) => {
             if (open)
                 this._buildMenu();
@@ -445,6 +559,9 @@ class IAmigosIndicator extends PanelMenu.Button {
             this._frame++;
             for (const pet of this._pets.values())
                 pet.tick(this._frame);
+            this._whipButton?.tick(this._frame);
+            if (this._comboLabel.visible && !this._combo.visible(Date.now() / 1000))
+                this._comboLabel.visible = false;
             if (this._frame % REFRESH_EVERY === 0)
                 this._refresh();
             return GLib.SOURCE_CONTINUE;
@@ -569,11 +686,8 @@ class IAmigosIndicator extends PanelMenu.Button {
             perProject.set(project, ordinal + 1);
 
             let pet = this._pets.get(name);
-            if (!pet) {
-                pet = new Pet(project, ordinal, pixel);
-                this._pets.set(name, pet);
-                this._box.add_child(pet);
-            }
+            if (!pet)
+                pet = this._addPet(name, project, ordinal, pixel);
             pet.setLook(project, ordinal);
             this._box.set_child_at_index(pet, i);
             const view = this._views.get(name);
@@ -584,6 +698,21 @@ class IAmigosIndicator extends PanelMenu.Button {
         if (this._more.get_parent() !== this._box)
             this._box.add_child(this._more);
         this._box.set_child_at_index(this._more, inBar.length);
+
+        // Whip to the right of everything, then the combo flying out of it.
+        const whipOn = this._settings.get_boolean('show-whip');
+        if (whipOn && !this._whipButton) {
+            this._whipButton = new WhipButton(pixel);
+            this._whipButton.accessible_name = t('whip.button');
+            this._box.add_child(this._whipButton);
+        } else if (!whipOn && this._whipButton) {
+            this._whipButton.destroy();
+            this._whipButton = null;
+        }
+        if (this._whipButton)
+            this._box.set_child_at_index(this._whipButton, inBar.length + 1);
+        if (!whipOn)
+            this._comboLabel.visible = false;
         this._more.text = `+${hidden}`;
         this._more.visible = hidden > 0;
 
@@ -624,9 +753,122 @@ class IAmigosIndicator extends PanelMenu.Button {
         }
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        const lashes = this._settings.get_int('whip-total');
+        if (lashes > 0 && this._settings.get_boolean('show-whip')) {
+            this.menu.addMenuItem(new PopupMenu.PopupMenuItem(
+                t('whip.stats', lashes, this._settings.get_int('whip-best')), {reactive: false}));
+        }
         const prefs = new PopupMenu.PopupMenuItem(t('menu.preferences'));
         prefs.connect('activate', () => this._openPrefs());
         this.menu.addMenuItem(prefs);
+    }
+
+    // The bar is a PanelMenu.Button: any press on it toggles the menu (from
+    // vfunc_event in GNOME 48, from a ClickGesture in 49+; both call
+    // menu.toggle()). Here only a right click opens it: a left click on a
+    // critter or on the whip runs its action, and anywhere else (between
+    // critters, on "+N") does nothing. The keyboard still opens it.
+    _routeClicks() {
+        const toggle = this.menu.toggle.bind(this.menu);
+        this.menu.toggle = () => {
+            const action = this._clickAction(Clutter.get_current_event());
+            if (!action)
+                return toggle();
+            if (this.menu.isOpen)
+                this.menu.close();
+            return action();
+        };
+    }
+
+    // What a press does instead of toggling the menu, or null to toggle it.
+    _clickAction(event) {
+        const type = event?.type();
+        const button = type === Clutter.EventType.BUTTON_PRESS || type === Clutter.EventType.BUTTON_RELEASE
+            ? event.get_button()
+            : type === Clutter.EventType.TOUCH_BEGIN ? Clutter.BUTTON_PRIMARY : 0;
+        if (!button || button === Clutter.BUTTON_SECONDARY)
+            return null;                    // right click or keyboard: the menu
+        const nothing = () => {};
+        if (button !== Clutter.BUTTON_PRIMARY)
+            return nothing;
+        const target = global.stage.get_event_actor(event);
+        if (!target)
+            return nothing;
+        if (this._whipButton?.contains(target))
+            return () => this._whip();
+        for (const [name, pet] of this._pets) {
+            if (pet.contains(target)) {
+                return () => {
+                    const s = this._sessions.get(name);
+                    if (s)
+                        focusSession(s);
+                };
+            }
+        }
+        return nothing;
+    }
+
+    _addPet(name, project, ordinal, pixel) {
+        const pet = new Pet(project, ordinal, pixel);
+        this._pets.set(name, pet);
+        this._box.add_child(pet);
+        return pet;
+    }
+
+    // Centred under the whip, kept inside its monitor.
+    _placeCombo() {
+        const whip = this._whipButton;
+        const label = this._comboLabel;
+        if (!whip)
+            return;
+        const [wx, wy] = whip.get_transformed_position();
+        const [ww, wh] = whip.get_transformed_size();
+        const [, lw] = label.get_preferred_width(-1);
+        const monitor = Main.layoutManager.findMonitorForActor(whip) ?? Main.layoutManager.primaryMonitor;
+        const gap = 4;
+        let x = wx + ww / 2 - lw / 2;
+        if (monitor)
+            x = Math.max(monitor.x + gap, Math.min(x, monitor.x + monitor.width - lw - gap));
+        label.set_position(Math.round(x), Math.round(wy + wh + gap));
+    }
+
+    // One lash to every critter that is still alive.
+    _whip() {
+        const now = Date.now() / 1000;
+        const hit = this._combo.hit(now);
+        for (const [name, pet] of this._pets) {
+            if (this._views.get(name) !== 'closed')
+                pet.whip(this._frame, hit.tier.rush);
+        }
+
+        this._whipButton?.crack(this._frame);
+
+        this._settings.set_int('whip-total', this._settings.get_int('whip-total') + 1);
+        if (hit.count > this._settings.get_int('whip-best'))
+            this._settings.set_int('whip-best', hit.count);
+
+        const label = this._comboLabel;
+        for (const tier of TIERS) {
+            if (tier.key)
+                label.remove_style_class_name(`tier-${tier.key}`);
+        }
+        if (hit.count < 2) {
+            label.visible = false;
+            return;
+        }
+        if (hit.tier.key)
+            label.add_style_class_name(`tier-${hit.tier.key}`);
+        label.text = hit.milestone && hit.tier.key ? `x${hit.count} ${t(`whip.${hit.tier.key}`)}` : `x${hit.count}`;
+        this._placeCombo();
+        label.visible = true;
+        // Arcade punch: a pop on every lash, a big one on every milestone.
+        label.remove_all_transitions();
+        label.set_scale(hit.milestone ? 1.8 : 1.3, hit.milestone ? 1.8 : 1.3);
+        label.ease({
+            scale_x: 1, scale_y: 1,
+            duration: hit.milestone ? 400 : 180,
+            mode: Clutter.AnimationMode.EASE_OUT_BACK,
+        });
     }
 
     // One session: "project · state · age" and, below, the details.
@@ -698,6 +940,8 @@ class IAmigosIndicator extends PanelMenu.Button {
         for (const id of this._settingsIds ?? [])
             this._settings.disconnect(id);
         this._settingsIds = null;
+        this._comboLabel?.destroy();
+        this._comboLabel = null;
         super.destroy();
     }
 });

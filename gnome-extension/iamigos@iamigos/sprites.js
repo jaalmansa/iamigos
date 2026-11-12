@@ -131,6 +131,44 @@ export const BADGES = {
     asleep: {color: '#c8c8d0', rows: ['xxxx', '..x.', '.x..', 'xxxx']},
 };
 
+// Anger mark drawn over a whipped critter (x = pixel on).
+export const WHIP_MARK = {color: '#ff3b30', rows: ['.x.x.', 'xx.xx', '.....', 'xx.xx', '.x.x.']};
+
+// The whip button in the top bar, same size as the critters.
+// k knob, h handle, l lash, x spark (only while it cracks).
+export const WHIP_ICON = {
+    colors: {k: '#5a3a1b', h: '#8a5a2b', l: '#d9c9a8', x: '#ffd23f'},
+    rows: [
+        '......llll..',
+        '.....l....l.',
+        '....l......l',
+        '....l......l',
+        '...l.......l',
+        '...l......l.',
+        '..hh.....l.x',
+        '..hh......x.',
+        '.hh......x.x',
+        '.hh.........',
+        'kk..........',
+    ],
+};
+
+// The lash: a diagonal stroke across the sprite, as [x, y] pixels.
+export function lashPixels() {
+    const out = [];
+    for (let y = 0; y < SPRITE_H; y++) {
+        const x = SPRITE_W - 1 - Math.round(y * (SPRITE_W - 1) / (SPRITE_H - 1));
+        out.push([x, y], [x + 1, y]);
+    }
+    return out;
+}
+
+// The same palette pushed towards a colour (hurt flash).
+export function tint(palette, hex, t) {
+    const target = hexToRgb(hex);
+    return Object.fromEntries(Object.entries(palette).map(([k, rgb]) => [k, mix(rgb, target, t)]));
+}
+
 function hexToRgb(hex) {
     const n = parseInt(hex.slice(1), 16);
     return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];

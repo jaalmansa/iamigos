@@ -6,19 +6,21 @@ agent is doing right now (working, waiting for your permission, asking you somet
 so you can stop switching terminals just to check.
 
 <p align="center">
-  <img src="docs/img/topbar.svg" alt="The GNOME top bar with five IAmigos critters and the session menu open" width="780">
+  <img src="docs/img/topbar.svg" alt="The GNOME top bar with five IAmigos critters, the whip and the session menu open" width="780">
 </p>
 
 - **One critter per session.** The same project always gets the same character, and a
   second session in that project gets a different colour.
-- **Details at a click.** The menu shows each session's state and, below it, the tool in use,
+- **Details at a right-click.** The menu shows each session's state and, below it, the tool in use,
   how long the turn has taken, the git branch, how much context it is using and its
   subagents.
 - **Subagents included.** While a session runs subagents, mini critters hop next to it.
 - **It insists when it matters.** A session left waiting for your permission or answer for
   too long starts shaking and gets a yellow border.
-- **Click to jump.** Pick a session in the menu to focus its terminal window, including the
-  right **zellij** or **tmux** tab and pane.
+- **Click to jump.** Click a critter to focus its terminal window, including the right
+  **zellij** or **tmux** tab and pane. Right-click it for the session menu.
+- **A whip, for slow ones.** Click it to lash every critter and chain arcade combos
+  (`x5 COMBO!`, `x10 SUPER!`…). Purely cosmetic.
 - **English or Spanish**, following your system language, and configurable from its own
   preferences window.
 - **No daemon, no network.** The agents write a small JSON file per session; the extension
@@ -61,7 +63,8 @@ and the menu marks it with ⚠.
 
 ### The menu
 
-Click any critter to open the session list, in the same order as the bar. Each session shows
+Right-click anywhere on the critters to open the session list, in the same order as the
+bar (a left click never opens it). Each session shows
 `project · state · time in that state` and, on a second line, whatever is known:
 
 | Detail | Example | Where it comes from |
@@ -80,6 +83,17 @@ While a session runs subagents (Claude Code's Task/Agent tool, or OpenCode child
 sessions), up to four **mini critters** hop next to its critter, and disappear as each
 subagent finishes.
 
+### The whip
+
+Are they taking too long? Click the **whip** to the right of the critters to lash every
+live one: it flinches, flashes red, gets an anger mark and then hops twice as fast for a
+few seconds. Keep clicking: lashes less than 1.2 s apart chain into an arcade combo floating
+under the whip (`x7`), with a shout every 5 hits (`x5 COMBO!`, `x10 SUPER!`,
+`x20 BRUTAL!`, `x50 LEGENDARY!`). The longer the combo, the longer they rush. The menu
+shows your total lashes and your best combo.
+
+It is purely cosmetic: the agents never find out.
+
 ### Many sessions
 
 When there are more sessions than the maximum (8 by default), the first ones get a critter
@@ -96,8 +110,8 @@ its folder.
 
 ## Preferences
 
-Open them from the menu (**Preferences**), from the Extensions app, or with
-`gnome-extensions prefs iamigos@iamigos`. Changes apply at once.
+Open them from the menu (right-click a critter → **Preferences**), from the Extensions app,
+or with `gnome-extensions prefs iamigos@iamigos`. Changes apply at once.
 
 | Setting | Default | |
 |---|---|---|
@@ -109,6 +123,7 @@ Open them from the menu (**Preferences**), from the Extensions app, or with
 | Details in the menu | On | The second line of each session |
 | Fall asleep after | 10 min | 0 = never |
 | Insist after | 120 s | Waiting for your permission or answer. 0 = never |
+| Whip button | On | The whip to the right of the critters |
 | Claude Code / OpenCode | On | Which agents to show |
 
 ## Install

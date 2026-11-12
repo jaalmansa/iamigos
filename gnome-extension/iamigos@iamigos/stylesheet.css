@@ -8,6 +8,11 @@
   padding: 0 1px;
 }
 
+/* Clickable: a hint on hover. Before the states, so their colours win. */
+.iamigos-pet:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
 .iamigos-pet.permission {
   background-color: #f07b1d;
   border-color: #f07b1d;
@@ -57,4 +62,41 @@
 .iamigos-menu .popup-menu-item {
   padding-left: 14px;
   padding-right: 14px;
+}
+
+/* Whip combo, floating under the whip (over the windows): hotter colours as
+   the combo grows. */
+.iamigos-combo {
+  font-size: 1.1em;
+  font-weight: 900;
+  color: #ffffff;
+  background-color: rgba(20, 20, 24, 0.85);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.iamigos-combo.tier-combo {
+  color: #ffd23f;
+}
+
+.iamigos-combo.tier-super {
+  color: #f0964a;
+}
+
+.iamigos-combo.tier-brutal {
+  color: #ff4d4d;
+}
+
+.iamigos-combo.tier-legend {
+  color: #ff4d4d;
+  background-color: #ffd23f;
+}
+
+.iamigos-whip {
+  border-radius: 5px;
+  padding: 0 2px;
+}
+
+.iamigos-whip:hover {
+  background-color: rgba(255, 255, 255, 0.12);
 }

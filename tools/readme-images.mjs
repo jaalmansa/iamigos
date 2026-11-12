@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --no-warnings
 // Generates the README images (animated SVGs) straight from the extension's sprites:
 //   docs/img/states/<state>.svg   one per state, animated like in the top bar
-//   docs/img/topbar.svg           top bar with several sessions + the dropdown menu
+//   docs/img/topbar.svg           top bar with several sessions, the whip + the session menu
 //   docs/img/characters.svg       every character
 //
 //   node tools/readme-images.mjs
@@ -10,7 +10,7 @@
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {CHARACTERS, HUES, BADGES, SPRITE_W, SPRITE_H, makePalette, greyPalette, lowestEyeRows, shade}
+import {CHARACTERS, HUES, BADGES, SPRITE_W, SPRITE_H, WHIP_ICON, makePalette, greyPalette, lowestEyeRows, shade}
     from '../gnome-extension/iamigos@iamigos/sprites.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -186,7 +186,8 @@ function mini(lk, x, y, s) {
     const miniW = (SPRITE_W + 1) * MS;
     const pets = sessions.map(s => ({s, p: pet(look(s.c, s.hue), s.view, 0, 0, S)}));
     const width = ({s, p}) => p.w + (s.subs ? miniW * Math.ceil(s.subs / 2) : 0);
-    const total = pets.reduce((sum, item) => sum + width(item) + GAP, -GAP);
+    const whipW = (SPRITE_W + 1) * S;   // the whip, to the right of the critters
+    const total = pets.reduce((sum, item) => sum + width(item) + GAP, -GAP) + GAP + whipW;
     const parts = [];
     let px = W - 24 - total;
     const startX = px;
@@ -201,16 +202,21 @@ function mini(lk, x, y, s) {
         }
         px += width(item) + GAP;
     }
+    const whipY = (BAR - (SPRITE_H + 1) * S) / 2 + S;
+    WHIP_ICON.rows.forEach((row, gy) => [...row].forEach((ch, gx) => {
+        if (ch !== '.' && ch !== 'x')      // x: the spark, only while it cracks
+            parts.push(`<rect x="${px + S + gx * S}" y="${whipY + gy * S}" width="${S}" height="${S}" fill="${WHIP_ICON.colors[ch]}"/>`);
+    }));
 
     const font = `font-family="Cantarell, 'Noto Sans', 'Segoe UI', system-ui, sans-serif"`;
-    const ROW = 50, PAD = 8, PREFS = 40;
+    const ROW = 50, PAD = 8, PREFS = 40, STATS = 34;
     const MX = 250, MW = W - MX - 12, MY = BAR + 8;
-    const MH = PAD + sessions.length * ROW + 9 + PREFS + PAD;
+    const MH = PAD + sessions.length * ROW + 9 + STATS + PREFS + PAD;
     const sepY = MY + PAD + sessions.length * ROW + 4;
     const menu = [
         `<rect x="${MX}" y="${MY}" width="${MW}" height="${MH}" rx="12" fill="#2a2a2e" stroke="#3a3a40"/>`,
         // the little arrow that points at the indicator
-        `<path d="M${startX + total / 2 - 8} ${MY + 0.5} l8 -8 l8 8z" fill="#2a2a2e"/>`,
+        `<path d="M${startX + (total - whipW) / 2 - 8} ${MY + 0.5} l8 -8 l8 8z" fill="#2a2a2e"/>`,
         // hovered row
         `<rect x="${MX + 6}" y="${MY + PAD + ROW}" width="${MW - 12}" height="${ROW}" rx="8" fill="#3a3a40"/>`,
         ...sessions.map((s, i) => {
@@ -220,7 +226,8 @@ function mini(lk, x, y, s) {
                 + `<text x="${MX + MW - 20}" y="${top + 30}" ${font} font-size="11.5" fill="#9a9aa2" text-anchor="end">${s.agent}</text>`;
         }),
         `<rect x="${MX + 14}" y="${sepY}" width="${MW - 28}" height="1" fill="#45454c"/>`,
-        `<text x="${MX + 20}" y="${sepY + 5 + PREFS / 2 + 5}" ${font} font-size="14" fill="#ececec">Preferences</text>`,
+        `<text x="${MX + 20}" y="${sepY + 5 + STATS / 2 + 5}" ${font} font-size="14" fill="#8a8a92">Lashes: 340  ·  best combo x27</text>`,
+        `<text x="${MX + 20}" y="${sepY + 5 + STATS + PREFS / 2 + 5}" ${font} font-size="14" fill="#ececec">Preferences</text>`,
     ];
 
     const H = MY + MH + 12;

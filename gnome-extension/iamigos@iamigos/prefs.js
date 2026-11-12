@@ -36,6 +36,7 @@ export default class IAmigosPreferences extends ExtensionPreferences {
         page.add(behaviour);
         behaviour.add(spinRow(settings, 'sleep-minutes', t('prefs.sleep'), t('prefs.sleep.sub'), 0, 240, 5));
         behaviour.add(spinRow(settings, 'long-wait-seconds', t('prefs.longWait'), t('prefs.longWait.sub'), 0, 3600, 30));
+        behaviour.add(switchRow(settings, 'show-whip', t('prefs.whip'), t('prefs.whip.sub')));
 
         // Agents
         const agents = new Adw.PreferencesGroup({title: t('prefs.agents')});
