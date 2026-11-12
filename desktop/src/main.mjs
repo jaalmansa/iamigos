@@ -170,6 +170,9 @@ async function start() {
     let strip = null;
 
     if (IS_MAC) {
+        // Without this macOS turns fast clicks into 'double-click' (and a third one
+        // into nothing), so the whip would stop answering after two lashes.
+        tray.setIgnoreDoubleClickEvents(true);
         // Left click: what is under the pointer (a critter jumps to its session,
         // the whip lashes them all). Right click: the menu.
         tray.on('click', (_e, bounds) => {
