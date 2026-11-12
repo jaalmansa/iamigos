@@ -73,8 +73,9 @@ const ok = msg => console.log(`✓ ${msg}`);
 const warn = msg => console.log(`! ${msg}`);
 const launchAllowed = () => process.env.IAMIGOS_NO_LAUNCH !== '1';
 
+// LC_ALL=C: the output is parsed (gnome-extensions info says "Estado:" in Spanish).
 function sh(cmd, args) {
-    const r = spawnSync(cmd, args, {encoding: 'utf8'});
+    const r = spawnSync(cmd, args, {encoding: 'utf8', env: {...process.env, LC_ALL: 'C'}});
     return r.error ? null : {code: r.status, out: (r.stdout || '').trim()};
 }
 

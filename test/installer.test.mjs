@@ -197,6 +197,16 @@ describe('cli', posixOnly, () => {
         assert.match(r.out, /15\/15/);
     });
 
+    test('status reads GNOME\'s state whatever the system language', () => {
+        // Like gnome-extensions on a Spanish system: translated unless LC_ALL=C.
+        writeFake('gnome-extensions', `#!/bin/sh
+[ "$1" = info ] || exit 2
+if [ "$LC_ALL" = C ]; then echo "  State: ACTIVE"; else echo "  Estado: ACTIVE"; fi
+`);
+        run('install');
+        assert.match(run('status').out, /GNOME\s+ACTIVE/);
+    });
+
     test('unknown command exits with an error', () => {
         assert.equal(run('nope').code, 1);
         assert.equal(run('--help').code, 0);
