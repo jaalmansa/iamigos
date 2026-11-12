@@ -42,7 +42,7 @@ so you can stop switching terminals just to check.
 | <img src="docs/img/states/background.svg" width="90" alt="background"> | **Background** | Slow cyan `…` | Turn finished, but a background shell is still running (Claude Code only) |
 | <img src="docs/img/states/asleep.svg" width="90" alt="asleep"> | **Asleep** | Eyes closed, floating `z` | Done or idle for 10 minutes without you coming back (configurable) |
 | <img src="docs/img/states/error.svg" width="90" alt="error"> | **Error** | Red border, ✗ | The turn failed (API error, crash…) |
-| <img src="docs/img/states/closed.svg" width="90" alt="closed"> | **Closed** | Greyed out, then gone after 30 s | The session ended or its process disappeared. Sessions that were already gone when GNOME started (e.g. from before you logged out) are removed straight away |
+| <img src="docs/img/states/closed.svg" width="90" alt="closed"> | **Closed** | Greyed out, then gone after 30 s | The session ended or its process disappeared. Sessions that were already gone when IAmigos started (e.g. from before you logged out) are removed straight away |
 
 States come from these agent events:
 
@@ -57,7 +57,7 @@ States come from these agent events:
 | Error | `StopFailure` | `session.error` |
 | Closed | `SessionEnd`, or the process no longer exists | `session.deleted`, or the process no longer exists |
 
-**Background** and **Asleep** are worked out by the extension itself: it looks for live
+**Background** and **Asleep** are worked out by IAmigos itself (the extension or the app): it looks for live
 background shells under the agent's process, and at how long the session has been done.
 
 If a session has been waiting for your **permission** or an **answer** for more than two
@@ -91,7 +91,7 @@ subagent finishes.
 Are they taking too long? Click the **whip** to the right of the critters to lash every
 live one: it flinches, flashes red, gets an anger mark and then hops twice as fast for a
 few seconds. Keep clicking: lashes less than 1.2 s apart chain into an arcade combo floating
-under the whip (`x7`), with a shout every 5 hits (`x5 COMBO!`, `x10 SUPER!`,
+under the whip (`x7`; next to the critters on macOS, above the strip on Windows), with a shout every 5 hits (`x5 COMBO!`, `x10 SUPER!`,
 `x20 BRUTAL!`, `x50 LEGENDARY!`). The longer the combo, the longer they rush. The menu
 shows your total lashes and your best combo.
 
@@ -278,11 +278,12 @@ installer, point it at the zip or the unpacked app:
 |---|---|
 | `npm install` then `npm run check` | Lint (ESLint), type check of the OpenCode plugin and all tests |
 | `npm test` | Tests only: installer, shared logic, desktop app, sprites, translations, OpenCode plugin (Node) and Claude Code hook (Python) |
-| `tools/demo.sh` / `tools/demo.sh --clean` | Creates fake sessions in every state (and removes them) |
+| `tools/demo.sh` / `tools/demo.sh --clean` | Creates fake sessions in every state (and removes them). Needs bash: on Windows, Git Bash |
 | `node tools/readme-images.mjs` | Regenerates the images in `docs/img/` from `sprites.js` |
 | `node tools/preview.mjs` | Writes `docs/sprites.html`: every character × state × colour |
 | `npm run pack-extension` | Builds the extension zip in `dist/` |
-| `journalctl -f -o cat /usr/bin/gnome-shell \| grep -i iamigos` | Shows the extension's logs |
+| `journalctl -f -o cat /usr/bin/gnome-shell \| grep -i iamigos` | Shows the extension's logs (Linux) |
+| `cd desktop && npm start` | Runs the macOS/Windows app; its logs (`[IAmigos] …`) show up in that terminal |
 
 Characters are plain text grids in `gnome-extension/iamigos@iamigos/sprites.js`, so adding
 one is a matter of drawing 12×11 characters. UI text lives in `strings.js`: every language
