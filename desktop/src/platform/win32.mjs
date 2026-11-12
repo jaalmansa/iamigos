@@ -1,7 +1,7 @@
 // IAmigos desktop — Windows: the process table from Win32_Process (PowerShell),
 // background shells, and bringing the session's terminal window forward.
 
-import {ancestors, backgroundShellCount} from '../shared/procs.js';
+import {ancestors, backgroundShellCount, jumpToPane} from '../shared/procs.js';
 import {cachedTable, isAlive, runner} from './common.mjs';
 
 const PS = ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand'];
@@ -65,6 +65,7 @@ export function createWin32Platform({env = process.env} = {}) {
             const byPid = new Map(procs.map(p => [p.pid, p]));
             const chain = [...ancestors(session.pid, pid => byPid.get(pid)?.ppid ?? 0)];
             await run([...PS, encode(focusScript(chain, session.project))]);
+            await jumpToPane(session.mux, run, session.term).catch(() => {});
         },
     };
 }

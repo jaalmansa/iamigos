@@ -30,7 +30,7 @@ export function pickMuxClients(procs, kind) {
 // A shell Claude Code left running after its turn (background Bash): it sources
 // a shell snapshot. MCP servers are children of claude too, but do not look like that.
 export function isBackgroundShell(cmdline) {
-    return /[\\/]\.claude[\\/]shell-snapshots[\\/]/.test(cmdline);
+    return /[\\/]\.claude[^\\/]*[\\/]shell-snapshots[\\/]/.test(cmdline);
 }
 
 export function backgroundShellCount(procs, pid) {
@@ -68,10 +68,21 @@ async function tmuxFocusPane(run, socket, pane) {
     await run(['tmux', '-S', socket, 'select-window', '-t', pane, ';', 'select-pane', '-t', pane]);
 }
 
+// WezTerm and kitty can focus a pane/window by id from the command line.
+function jumpToTerminalTab(term, run) {
+    if (term?.wezterm_pane)
+        return run(['wezterm', 'cli', 'activate-pane', '--pane-id', String(term.wezterm_pane)]);
+    if (term?.kitty_window) {
+        const to = term.kitty_listen ? ['--to', term.kitty_listen] : [];
+        return run(['kitten', '@', ...to, 'focus-window', '--match', `id:${term.kitty_window}`]);
+    }
+    return Promise.resolve();
+}
+
 // Jumps to the zellij/tmux pane the session lives in (does nothing outside them).
-export function jumpToPane(mux, run) {
+export function jumpToPane(mux, run, term = null) {
     if (!mux?.pane)
-        return Promise.resolve();
+        return jumpToTerminalTab(term, run);
     if (mux.kind === 'zellij' && mux.session)
         return zellijFocusPane(run, mux.session, String(mux.pane));
     if (mux.kind === 'tmux' && mux.socket)

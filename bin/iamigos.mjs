@@ -47,6 +47,24 @@ const DST = {
     settings: path.join(HOME, '.claude', 'settings.json'),
 };
 
+// Every Claude Code config folder: ~/.claude, the one in $CLAUDE_CONFIG_DIR, and
+// the extra ones people alias (CLAUDE_CONFIG_DIR=~/.claude-work claude): ~/.claude-*.
+// Each has its own settings.json, so each needs the hook.
+function claudeDirs() {
+    const dirs = new Set([DST.claudeDir]);
+    if (process.env.CLAUDE_CONFIG_DIR)
+        dirs.add(path.resolve(process.env.CLAUDE_CONFIG_DIR));
+    try {
+        for (const e of fs.readdirSync(HOME, {withFileTypes: true})) {
+            if (e.name.startsWith('.claude-') && e.isDirectory() && fs.existsSync(path.join(HOME, e.name, 'settings.json')))
+                dirs.add(path.join(HOME, e.name));
+        }
+    } catch {
+        // unreadable home: ~/.claude only
+    }
+    return [...dirs].filter(d => fs.existsSync(d));
+}
+
 // The desktop app (macOS/Windows): where it goes and how its process is called.
 const APP = {
     darwin: {
@@ -134,16 +152,17 @@ const isOurHook = h => typeof h.command === 'string' &&
 
 // Adds or removes the hook for every event in ~/.claude/settings.json.
 // Always saves a backup to settings.json.iamigos.bak first.
-function claudeSettings(action) {
+function claudeSettings(action, dir = DST.claudeDir) {
+    const file = path.join(dir, 'settings.json');
     let cfg = {};
-    if (fs.existsSync(DST.settings)) {
-        const raw = fs.readFileSync(DST.settings, 'utf8');
+    if (fs.existsSync(file)) {
+        const raw = fs.readFileSync(file, 'utf8');
         try {
             cfg = JSON.parse(raw);
         } catch (e) {
-            throw new Error(`${DST.settings} is not valid JSON (${e.message}); leaving it alone.`, {cause: e});
+            throw new Error(`${file} is not valid JSON (${e.message}); leaving it alone.`, {cause: e});
         }
-        fs.writeFileSync(`${DST.settings}.iamigos.bak`, raw);
+        fs.writeFileSync(`${file}.iamigos.bak`, raw);
     } else if (action === 'remove') {
         return false;
     }
@@ -162,10 +181,10 @@ function claudeSettings(action) {
     if (!Object.keys(hooks).length)
         delete cfg.hooks;
 
-    fs.mkdirSync(path.dirname(DST.settings), {recursive: true});
-    const tmp = `${DST.settings}.iamigos.tmp`;
+    fs.mkdirSync(dir, {recursive: true});
+    const tmp = `${file}.iamigos.tmp`;
     fs.writeFileSync(tmp, `${JSON.stringify(cfg, null, 2)}\n`);
-    fs.renameSync(tmp, DST.settings);
+    fs.renameSync(tmp, file);
     return true;
 }
 
@@ -354,9 +373,12 @@ async function install(flags) {
     place(SRC.hook, DST.hook, link, 0o755);
     ok(`hook        → ${DST.hook}${link ? ' (link)' : ''}`);
 
-    if (fs.existsSync(DST.claudeDir)) {
-        claudeSettings('add');
-        ok(`Claude Code → hooks in ${DST.settings} (backup in .iamigos.bak)`);
+    const dirs = claudeDirs();
+    if (dirs.length) {
+        for (const dir of dirs) {
+            claudeSettings('add', dir);
+            ok(`Claude Code → hooks in ${path.join(dir, 'settings.json')} (backup in .iamigos.bak)`);
+        }
     } else {
         warn(`${DST.claudeDir} not found: if you install Claude Code later, run this command again.`);
     }
@@ -387,8 +409,10 @@ function uninstall() {
             ok(`removed ${p}`);
         }
     }
-    if (claudeSettings('remove'))
-        ok(`hooks removed from ${DST.settings} (backup in .iamigos.bak)`);
+    for (const dir of claudeDirs()) {
+        if (claudeSettings('remove', dir))
+            ok(`hooks removed from ${path.join(dir, 'settings.json')} (backup in .iamigos.bak)`);
+    }
     console.log('IAmigos uninstalled. Saved sessions are still in ~/.local/state/iamigos.');
 }
 
@@ -404,14 +428,16 @@ function status() {
     show('hook', DST.hook);
     show('OpenCode', DST.opencode);
 
-    let hooked = 0;
-    try {
-        const cfg = JSON.parse(fs.readFileSync(DST.settings, 'utf8'));
-        hooked = EVENTS.filter(ev => (cfg.hooks?.[ev] ?? []).some(g => (g.hooks ?? []).some(isOurHook))).length;
-    } catch {
-        // no settings.json (or unreadable): 0 events
+    for (const dir of claudeDirs()) {
+        let hooked = 0;
+        try {
+            const cfg = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
+            hooked = EVENTS.filter(ev => (cfg.hooks?.[ev] ?? []).some(g => (g.hooks ?? []).some(isOurHook))).length;
+        } catch {
+            // no settings.json (or unreadable): 0 events
+        }
+        console.log(`${'Claude Code'.padEnd(12)} ${hooked}/${EVENTS.length} events with the hook  (${dir})`);
     }
-    console.log(`${'Claude Code'.padEnd(12)} ${hooked}/${EVENTS.length} events with the hook`);
 
     if (PLATFORM === 'linux') {
         const info = sh('gnome-extensions', ['info', UUID]);

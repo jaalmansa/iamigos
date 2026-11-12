@@ -11,6 +11,7 @@ without writing anything to stdout (Claude Code reads the stdout of some hooks).
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 
@@ -121,6 +122,29 @@ def mux_info():
     if env.get("TMUX") and env.get("TMUX_PANE"):
         return {"kind": "tmux", "socket": env["TMUX"].split(",")[0], "pane": env["TMUX_PANE"]}
     return None
+
+
+def term_info(agent_pid):
+    """Which terminal tab/pane the session lives in, for terminals that can focus one:
+    its TTY (macOS Terminal.app and iTerm2 find the tab by it), WezTerm's pane and
+    kitty's window."""
+    env = os.environ
+    term = {}
+    if env.get("WEZTERM_PANE"):
+        term["wezterm_pane"] = env["WEZTERM_PANE"]
+    if env.get("KITTY_WINDOW_ID"):
+        term["kitty_window"] = env["KITTY_WINDOW_ID"]
+        if env.get("KITTY_LISTEN_ON"):
+            term["kitty_listen"] = env["KITTY_LISTEN_ON"]
+    if sys.platform == "darwin" and agent_pid:
+        try:
+            tty = subprocess.run(["ps", "-o", "tty=", "-p", str(agent_pid)], capture_output=True,
+                                 text=True, timeout=2).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            tty = ""
+        if tty and tty not in ("?", "??"):
+            term["tty"] = tty if tty.startswith("/dev/") else "/dev/" + tty
+    return term or None
 
 
 def _proc_linux(pid):
@@ -272,6 +296,7 @@ def main():
     elif name == "PostCompact":
         tokens = None   # unknown until the next response
     cwd = ev.get("cwd") or prev.get("cwd") or ""
+    agent_pid = prev.get("pid") or find_agent_pid()
     data = {
         "v": 1,
         "agent": "claude",
@@ -280,8 +305,9 @@ def main():
         "detail": detail or "",
         "cwd": cwd,
         "project": project_name(cwd),
-        "pid": prev.get("pid") or find_agent_pid(),
+        "pid": agent_pid,
         "mux": prev.get("mux") or mux_info(),
+        "term": prev.get("term") or term_info(agent_pid),
         "turn_started": turn_started,
         "turn_ended": turn_ended,
         "tokens": tokens,

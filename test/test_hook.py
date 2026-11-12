@@ -154,6 +154,14 @@ class HookTest(unittest.TestCase):
         self.emit("SessionStart", env={"TMUX": "/tmp/tmux-1000/default,123,0", "TMUX_PANE": "%7"})
         self.assertEqual(self.session()["mux"], {"kind": "tmux", "socket": "/tmp/tmux-1000/default", "pane": "%7"})
 
+    def test_records_wezterm_and_kitty_ids(self):
+        self.emit("SessionStart", env={"WEZTERM_PANE": "4"})
+        self.assertEqual(self.session()["term"]["wezterm_pane"], "4")
+        os.remove(self.path)
+        self.emit("SessionStart", env={"KITTY_WINDOW_ID": "9", "KITTY_LISTEN_ON": "unix:/tmp/k"})
+        self.assertEqual(self.session()["term"]["kitty_window"], "9")
+        self.assertEqual(self.session()["term"]["kitty_listen"], "unix:/tmp/k")
+
     def test_plain_terminal_has_no_mux(self):
         self.emit("SessionStart")
         self.assertIsNone(self.session()["mux"])

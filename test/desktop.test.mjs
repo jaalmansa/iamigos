@@ -15,7 +15,7 @@ import {DEFAULTS, Settings} from '../desktop/src/settings.mjs';
 import {resolveLanguage, setLanguage, t} from '../desktop/src/i18n.mjs';
 import {SessionStore, stateDir} from '../desktop/src/sessions.mjs';
 import {menuTemplate} from '../desktop/src/menu.mjs';
-import {appBundleOf, parsePs, pickTerminalApp, withToolPath} from '../desktop/src/platform/posix.mjs';
+import {appBundleOf, parsePs, pickTerminalApp, tabScript, withToolPath} from '../desktop/src/platform/posix.mjs';
 import {focusScript, parseCim} from '../desktop/src/platform/win32.mjs';
 import {cachedTable, isAlive} from '../desktop/src/platform/common.mjs';
 import {gitBranch} from '../desktop/src/git.mjs';
@@ -341,5 +341,18 @@ describe('git', () => {
         fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${wtGit}\n`);
         assert.equal(gitBranch(wt), 'other');
         assert.equal(gitBranch(path.parse(tmp).root), null);
+    });
+});
+
+describe('jumping to the right tab', () => {
+    test('Terminal.app and iTerm2 find the tab by TTY; other apps get nothing', () => {
+        assert.match(tabScript('/System/Applications/Utilities/Terminal.app', '/dev/ttys012'), /tty of t is "\/dev\/ttys012"/);
+        assert.match(tabScript('/Applications/iTerm.app', '/dev/ttys012'), /tty of s is "\/dev\/ttys012"/);
+        assert.equal(tabScript('/Applications/Ghostty.app', '/dev/ttys012'), null);
+        assert.equal(tabScript('/Applications/iTerm.app', null), null);
+    });
+
+    test('a TTY that is not a device path is never put in a script', () => {
+        assert.equal(tabScript('/Applications/iTerm.app', '/dev/ttys1" & (do shell script "x")'), null);
     });
 });

@@ -161,7 +161,7 @@ function focusSession(session) {
 
     if (win)
         Main.activateWindow(win);
-    jumpToPane(mux, run).catch(e => console.warn(`[IAmigos] could not jump to the pane: ${e.message}`));
+    jumpToPane(mux, run, session.term).catch(e => console.warn(`[IAmigos] could not jump to the pane: ${e.message}`));
 }
 
 // Draws pixels from paint.js: [x, y, rgb, alpha] in sprite pixels of `px` screen pixels.
