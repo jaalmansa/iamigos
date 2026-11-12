@@ -1,7 +1,7 @@
 {
   "name": "iamigos",
   "version": "0.1.0",
-  "description": "Pixel-art critters in the GNOME top bar showing what your Claude Code and OpenCode sessions are doing.",
+  "description": "Pixel-art critters showing what your Claude Code and OpenCode sessions are doing: in the GNOME top bar, the macOS menu bar or a strip above the Windows taskbar.",
   "license": "MIT",
   "author": "jaalmansa",
   "repository": {
@@ -26,20 +26,26 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc -p test/tsconfig.json",
-    "test": "node --test 'test/*.test.mjs' && python3 -m unittest discover -s test -p 'test_*.py'",
+    "test": "node desktop/scripts/sync-shared.mjs && node --test \"test/*.test.mjs\" && node tools/test-python.mjs",
     "check": "npm run lint && npm run typecheck && npm test",
     "dev-install": "node bin/iamigos.mjs install --link",
-    "pack-extension": "glib-compile-schemas gnome-extension/iamigos@iamigos/schemas && gnome-extensions pack gnome-extension/iamigos@iamigos --force --out-dir dist --extra-source=sprites.js --extra-source=i18n.js --extra-source=strings.js --extra-source=whip.js --schema=schemas/org.gnome.shell.extensions.iamigos.gschema.xml"
+    "pack-extension": "glib-compile-schemas gnome-extension/iamigos@iamigos/schemas && gnome-extensions pack gnome-extension/iamigos@iamigos --force --out-dir dist --extra-source=sprites.js --extra-source=i18n.js --extra-source=strings.js --extra-source=whip.js --extra-source=view.js --extra-source=paint.js --extra-source=procs.js --schema=schemas/org.gnome.shell.extensions.iamigos.gschema.xml"
   },
   "keywords": [
     "gnome-shell",
     "gnome-extension",
+    "macos",
+    "menu-bar",
+    "windows",
+    "tray",
     "claude-code",
     "opencode",
     "pixel-art"
   ],
   "os": [
-    "linux"
+    "linux",
+    "darwin",
+    "win32"
   ],
   "engines": {
     "node": ">=18"

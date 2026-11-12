@@ -6,69 +6,27 @@
 //
 //   node tools/readme-images.mjs
 //
-// The frame logic mirrors IAmigosPet._paint() in extension.js: keep both in sync.
+// The frames come from paint.js, the same code the extension draws with.
 import {mkdirSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {CHARACTERS, HUES, BADGES, SPRITE_W, SPRITE_H, WHIP_ICON, makePalette, greyPalette, lowestEyeRows, shade}
-    from '../gnome-extension/iamigos@iamigos/sprites.js';
+import {CHARACTERS, HUES, SPRITE_W, SPRITE_H, WHIP_ICON} from '../gnome-extension/iamigos@iamigos/sprites.js';
+import {BOX, COLS, ROWS, lookOf, petPixels, spritePixels} from '../gnome-extension/iamigos@iamigos/paint.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'docs', 'img');
 const TICK_MS = 200;                      // same as the extension
-const COLS = SPRITE_W + 3, ROWS = SPRITE_H + 1;
-
-// stylesheet.css: background / border colour of the pet box per state.
-const BOX = {
-    permission: {bg: '#f07b1d', border: '#f07b1d'},
-    asking: {bg: '#5a2f12', border: '#f07b1d'},
-    done: {border: '#4cd964'},
-    error: {border: '#ff4d4d'},
-};
 // How many ticks until the animation repeats.
 const PERIOD = {working: 8, compacting: 8, background: 16, asleep: 10, permission: 6, asking: 6};
 
 const hex = c => `#${c.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
 
 // Pixels [x, y, colour, alpha] of one frame, split into the body and the status
-// indicator so each layer can be animated on its own (same rules as _paint()).
+// indicator so each layer can be animated on its own.
 function frame(look, view, f) {
-    const pal = view === 'closed' ? greyPalette() : makePalette(look.hue);
-    const alpha = view === 'closed' ? 0.6 : 1;
-    const eyesClosed = view === 'asleep' || view === 'closed';
-    let ox = 0, oy = 1;
-    if (view === 'working' && f % 4 < 2)
-        oy = 0;
-    if (view === 'compacting')
-        ox = f % 2;
-
-    const px = [];
-    look.grid.forEach((row, y) => [...row].forEach((ch, x) => {
-        if (ch === '.')
-            return;
-        const key = ch === 'e' && eyesClosed ? (look.eyes[x] === y ? 'd' : 'b') : ch;
-        px.push([ox + x, oy + y, hex(pal[key]), alpha]);
-    }));
-
-    const ov = [];
-    if (view === 'working' || view === 'compacting' || view === 'background') {
-        const c = {working: '#ffffff', compacting: '#bf99ff', background: '#59ccff'}[view];
-        const n = Math.floor(f / (view === 'background' ? 4 : 2)) % 4;
-        for (let i = 0; i < n; i++)
-            ov.push([COLS - 5 + i * 2, 0, c, 1]);
-    } else if (BADGES[view]) {
-        const b = BADGES[view];
-        const w = b.rows[0].length;
-        const lift = view === 'asleep' ? Math.floor(f / 5) % 2 : 0;
-        const blink = (view === 'permission' || view === 'asking') && Math.floor(f / 3) % 2;
-        if (!blink) {
-            b.rows.forEach((row, y) => [...row].forEach((ch, x) => {
-                if (ch === 'x')
-                    ov.push([COLS - w + x, y + 1 - lift, b.color, 1]);
-            }));
-        }
-    }
-    return {body: px, over: ov};
+    const {body, over} = petPixels(look, view, f);
+    const toHex = ([x, y, rgb, a]) => [x, y, hex(rgb), a];
+    return {body: body.map(toHex), over: over.map(toHex)};
 }
 
 let uid = 0;
@@ -120,10 +78,7 @@ function pet(look, view, x, y, s) {
     return {svg: out.join(''), w, h};
 }
 
-const look = (character, hue) => {
-    const grid = shade(CHARACTERS[character]);
-    return {grid, eyes: lowestEyeRows(grid), hue};
-};
+const look = (character, hue) => lookOf({character, hue});
 
 const svgDoc = (w, h, body) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges">${body}</svg>\n`;
@@ -153,13 +108,9 @@ const PANEL = '#1d1d20';
 // --- Top bar + dropdown menu --------------------------------------------------
 // Mini critter (a subagent): the same sprite, smaller, without the state box.
 function mini(lk, x, y, s) {
-    const pal = makePalette(lk.hue);
-    const out = [];
-    lk.grid.forEach((row, gy) => [...row].forEach((ch, gx) => {
-        if (ch !== '.')
-            out.push(`<rect x="${x + gx * s}" y="${y + gy * s}" width="${s}" height="${s}" fill="${hex(pal[ch])}"/>`);
-    }));
-    return out.join('');
+    return spritePixels(lk, lk.palette, 1, false)
+        .map(([gx, gy, rgb]) => `<rect x="${x + gx * s}" y="${y + gy * s}" width="${s}" height="${s}" fill="${hex(rgb)}"/>`)
+        .join('');
 }
 
 {

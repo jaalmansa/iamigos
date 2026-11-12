@@ -1,0 +1,20 @@
+{
+  "name": "iamigos-desktop",
+  "productName": "IAmigos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "IAmigos for macOS (menu bar) and Windows (floating strip + tray): your AI coding agents, at a glance.",
+  "license": "MIT",
+  "author": "jaalmansa",
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "sync": "node scripts/sync-shared.mjs",
+    "start": "npm run sync && electron .",
+    "dist": "npm run sync && electron-builder --config electron-builder.config.cjs --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.18.1"
+  }
+}

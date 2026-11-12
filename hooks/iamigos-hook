@@ -2,13 +2,15 @@
 """IAmigos — Claude Code hook.
 
 Reads the event JSON from stdin, turns it into a state and writes it to
-$XDG_STATE_HOME/iamigos/sessions/claude-<session_id>.json (atomically).
+$XDG_STATE_HOME/iamigos/sessions/claude-<session_id>.json (atomically), with
+~/.local/state as the default on every platform (Linux, macOS and Windows).
 
 It must never break the session: any error is ignored and it exits with 0,
 without writing anything to stdout (Claude Code reads the stdout of some hooks).
 """
 import json
 import os
+import re
 import sys
 import time
 
@@ -92,6 +94,12 @@ def context_usage(transcript_path):
     return None, None
 
 
+def project_name(cwd):
+    """Name of the project folder (Linux, macOS and Windows paths)."""
+    name = re.split(r"[\\/]", cwd.rstrip("/\\"))[-1] if cwd else ""
+    return name or "?"
+
+
 def update_subagents(name, ev, prev_list):
     """List of live subagents: [{id, type, since}]."""
     if name in ("SessionStart", "SessionEnd"):
@@ -115,30 +123,113 @@ def mux_info():
     return None
 
 
-def find_agent_pid():
-    """Walks up the parent processes until it finds Claude Code."""
+def _proc_linux(pid):
+    """(name, exe, parent pid) of a process, from /proc."""
+    try:
+        exe = os.readlink(f"/proc/{pid}/exe")
+    except OSError:
+        exe = ""
+    try:
+        with open(f"/proc/{pid}/comm") as f:
+            comm = f.read().strip()
+    except OSError:
+        comm = ""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            # the comm field may contain spaces: split after the last ')'
+            ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        ppid = 0
+    return comm, exe, ppid
+
+
+def _proc_darwin(pid):
+    """(name, exe, parent pid) of a process, from ps (macOS has no /proc)."""
+    import subprocess
+    try:
+        out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=2).stdout.strip()
+        ppid, comm = out.split(None, 1)
+        return os.path.basename(comm), comm, int(ppid)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return "", "", 0
+
+
+def _windows_processes():
+    """{pid: (exe name, parent pid)} of every process, with the Toolhelp API."""
+    import ctypes
+    from ctypes import wintypes
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snap = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if not snap or snap == wintypes.HANDLE(-1).value:
+        return {}
+    procs = {}
+    try:
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+        ok = kernel32.Process32FirstW(snap, ctypes.byref(entry))
+        while ok:
+            procs[entry.th32ProcessID] = (entry.szExeFile, entry.th32ParentProcessID)
+            ok = kernel32.Process32NextW(snap, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snap)
+    return procs
+
+
+def proc_reader(platform=sys.platform):
+    """A function pid → (name, exe, parent pid) for this platform."""
+    if platform == "darwin":
+        return _proc_darwin
+    if platform == "win32":
+        procs = _windows_processes()
+
+        def read(pid):
+            name, ppid = procs.get(pid, ("", 0))
+            return name, name, ppid
+        return read
+    return _proc_linux
+
+
+def find_agent_pid(read=None):
+    """Walks up the parent processes until it finds Claude Code.
+
+    Only runs once per session: the pid is kept in the session file afterwards.
+    """
+    read = read or proc_reader()
     pid = os.getppid()
     for _ in range(8):
         if pid <= 1:
             break
-        try:
-            exe = os.readlink(f"/proc/{pid}/exe")
-        except OSError:
-            exe = ""
-        try:
-            with open(f"/proc/{pid}/comm") as f:
-                comm = f.read().strip()
-        except OSError:
-            comm = ""
-        if "claude" in comm or "/claude/" in exe:
+        comm, exe, ppid = read(pid)
+        if "claude" in comm.lower() or "/claude/" in exe:
             return pid
-        try:
-            with open(f"/proc/{pid}/stat") as f:
-                # the comm field may contain spaces: split after the last ')'
-                pid = int(f.read().rsplit(")", 1)[1].split()[1])
-        except (OSError, ValueError, IndexError):
+        if not ppid:
             break
+        pid = ppid
     return os.getppid()
+
+
+def replace(tmp, path, tries=10):
+    """os.replace, retried: on Windows it fails while a reader has the file open."""
+    for i in range(tries):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.02)
 
 
 def main():
@@ -188,7 +279,7 @@ def main():
         "state": state,
         "detail": detail or "",
         "cwd": cwd,
-        "project": os.path.basename(cwd.rstrip("/")) or "?",
+        "project": project_name(cwd),
         "pid": prev.get("pid") or find_agent_pid(),
         "mux": prev.get("mux") or mux_info(),
         "turn_started": turn_started,
@@ -205,7 +296,7 @@ def main():
     tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w") as f:
         json.dump(data, f)
-    os.replace(tmp, path)
+    replace(tmp, path)
 
 
 if __name__ == "__main__":
