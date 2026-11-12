@@ -181,7 +181,13 @@ async function start() {
             const b = bounds ?? tray.getBounds();
             const imageWidth = lastStrip.width / lastStrip.scale;
             const offset = tray.getTitle() ? 2 : Math.max(0, (b.width - imageWidth) / 2);
-            clickAt((screen.getCursorScreenPoint().x - b.x - offset) * lastStrip.scale);
+            const x = (screen.getCursorScreenPoint().x - b.x - offset) * lastStrip.scale;
+            // The combo text grows the menu-bar item (leftwards) and moves the whip away from
+            // the pointer: a click on that text keeps lashing.
+            if (tray.getTitle() && x > lastStrip.width && lastStrip.items.some(it => it.kind === 'whip'))
+                whip();
+            else
+                clickAt(x);
         });
     } else {
         const {Strip} = await import('./strip-window.mjs');
