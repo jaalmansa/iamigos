@@ -1,6 +1,6 @@
 {
   "name": "iamigos",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Pixel-art critters showing what your Claude Code and OpenCode sessions are doing: in the GNOME top bar, the macOS menu bar or a strip above the Windows taskbar.",
   "license": "MIT",
   "author": "jaalmansa",
