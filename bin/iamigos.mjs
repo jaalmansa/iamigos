@@ -47,6 +47,28 @@ const DST = {
     settings: path.join(HOME, '.claude', 'settings.json'),
 };
 
+// Every OpenCode config folder: the default one, $OPENCODE_CONFIG_DIR, and the extra
+// ones people alias (OPENCODE_CONFIG_DIR=~/.opencode-work opencode): ~/.opencode-*
+// and ~/.config/opencode-*. The plugin goes in each one's plugins/ folder.
+function opencodeDirs() {
+    const dirs = new Set([DST.opencodeDir]);
+    if (process.env.OPENCODE_CONFIG_DIR)
+        dirs.add(path.resolve(process.env.OPENCODE_CONFIG_DIR));
+    for (const [parent, prefix] of [[HOME, '.opencode-'], [XDG_CONFIG, 'opencode-']]) {
+        try {
+            for (const e of fs.readdirSync(parent, {withFileTypes: true})) {
+                if (e.name.startsWith(prefix) && e.isDirectory())
+                    dirs.add(path.join(parent, e.name));
+            }
+        } catch {
+            // unreadable folder: skip it
+        }
+    }
+    return [...dirs].filter(d => fs.existsSync(d));
+}
+
+const opencodePlugin = dir => path.join(dir, 'plugins', 'iamigos.ts');
+
 // Every Claude Code config folder: ~/.claude, the one in $CLAUDE_CONFIG_DIR, and
 // the extra ones people alias (CLAUDE_CONFIG_DIR=~/.claude-work claude): ~/.claude-*.
 // Each has its own settings.json, so each needs the hook.
@@ -383,9 +405,9 @@ async function install(flags) {
         warn(`${DST.claudeDir} not found: if you install Claude Code later, run this command again.`);
     }
 
-    if (fs.existsSync(DST.opencodeDir)) {
-        place(SRC.opencode, DST.opencode, link);
-        ok(`OpenCode    → ${DST.opencode}${link ? ' (link)' : ''}`);
+    for (const dir of opencodeDirs()) {
+        place(SRC.opencode, opencodePlugin(dir), link);
+        ok(`OpenCode    → ${opencodePlugin(dir)}${link ? ' (link)' : ''}`);
     }
 
     if (PLATFORM === 'linux')
@@ -403,7 +425,7 @@ function uninstall() {
     } else {
         uninstallApp();
     }
-    for (const p of [DST.ext, DST.hook, DST.opencode]) {
+    for (const p of [DST.ext, DST.hook, DST.opencode, ...opencodeDirs().map(opencodePlugin)]) {
         if (exists(p)) {
             remove(p);
             ok(`removed ${p}`);
@@ -427,6 +449,8 @@ function status() {
         show('app', APP.dir);
     show('hook', DST.hook);
     show('OpenCode', DST.opencode);
+    for (const dir of opencodeDirs().filter(d => d !== DST.opencodeDir))
+        show('OpenCode', opencodePlugin(dir));
 
     for (const dir of claudeDirs()) {
         let hooked = 0;

@@ -1,5 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import { basename, join } from "node:path"
 
@@ -14,6 +15,23 @@ function muxInfo() {
     return { kind: "zellij", session: e.ZELLIJ_SESSION_NAME, pane: e.ZELLIJ_PANE_ID }
   if (e.TMUX && e.TMUX_PANE) return { kind: "tmux", socket: e.TMUX.split(",")[0], pane: e.TMUX_PANE }
   return null
+}
+
+// Which terminal tab/pane the session lives in (same as the Claude hook): its TTY on
+// macOS (Terminal.app and iTerm2 find the tab by it), WezTerm's pane, kitty's window.
+function termInfo() {
+  const e = process.env
+  const term: Record<string, string> = {}
+  if (e.WEZTERM_PANE) term.wezterm_pane = e.WEZTERM_PANE
+  if (e.KITTY_WINDOW_ID) {
+    term.kitty_window = e.KITTY_WINDOW_ID
+    if (e.KITTY_LISTEN_ON) term.kitty_listen = e.KITTY_LISTEN_ON
+  }
+  if (process.platform === "darwin") {
+    const tty = spawnSync("ps", ["-o", "tty=", "-p", String(process.pid)], { encoding: "utf8", timeout: 2000 }).stdout?.trim()
+    if (tty && tty !== "?" && tty !== "??") term.tty = tty.startsWith("/dev/") ? tty : `/dev/${tty}`
+  }
+  return Object.keys(term).length ? term : null
 }
 
 const STATE_DIR = join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "iamigos", "sessions")
@@ -56,6 +74,7 @@ export const IAmigosPlugin: Plugin = async ({ directory }) => {
         project: basename(cwd) || "?",
         pid: process.pid,
         mux: prev.mux ?? muxInfo(),
+        term: prev.term ?? termInfo(),
         turn_started: extra.turn === "start" ? now : (prev.turn_started ?? null),
         turn_ended: extra.turn === "start" ? null : extra.turn === "end" ? now : (prev.turn_ended ?? null),
         tokens: extra.tokens ?? prev.tokens ?? null,

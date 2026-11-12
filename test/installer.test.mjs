@@ -152,6 +152,15 @@ describe('install', posixOnly, () => {
         assert.ok(fs.existsSync(plugin));
     });
 
+    test('installs the OpenCode plugin in every aliased config folder', () => {
+        const extra = path.join(home, '.opencode-work');
+        fs.mkdirSync(extra, {recursive: true});
+        run('install');
+        assert.ok(fs.existsSync(path.join(extra, 'plugins', 'iamigos.ts')));
+        run('uninstall');
+        assert.ok(!fs.existsSync(path.join(extra, 'plugins', 'iamigos.ts')));
+    });
+
     test('--link symlinks to the repository', () => {
         run('install', '--link');
         assert.equal(fs.readlinkSync(extDir()), path.join(ROOT, 'gnome-extension', UUID));
